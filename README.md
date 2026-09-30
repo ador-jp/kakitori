@@ -12,7 +12,7 @@
 - PWA、静的配布、オフライン利用
 - `?grade=e3&kanji=海&mode=test` のような直接リンク（`grade`: `e1`〜`e6`, `j1`〜`j3`, `joyo`）
 - 指定した番号範囲から重複なしで指定数を抽出するテストと結果一覧
-- テスト中は答えを隠し、読みを使った例文と問題を表示
+- テスト中は答えを隠し、常用漢字表の音訓と穴埋め例文を表示
 - `?debug=1` による参照線・入力線・各筆画誤差の開発表示
 
 ## 対応漢字と学年分類
@@ -53,7 +53,7 @@ npm install
 npm run dev
 npm test
 npm run validate:data
-npm run update:readings  # Unicode Unihan最新版からテスト用の読みを更新
+npm run update:prompts  # 文化庁「常用漢字表」からテスト問題を更新
 npm run build
 ```
 
@@ -83,7 +83,7 @@ Capacitor 8 の要件により Xcode 26 以降が必要です。Xcodeで開い�
 
 ## 使用データ・ライセンス
 
-筆順データは [KanjiVG](https://github.com/KanjiVG/kanjivg)（Copyright © Ulrich Apel、CC BY-SA 3.0）、テスト用の読みは [Unicode Unihan](https://www.unicode.org/charts/unihan.html)（Copyright © Unicode, Inc.、Unicode License v3）です。詳細は `THIRD_PARTY_LICENSES.md`、`public/data/KANJIVG_COPYING`、`public/data/UNICODE_LICENSE.txt` を参照してください。アプリのソースコードはMIT Licenseです。
+筆順データは [KanjiVG](https://github.com/KanjiVG/kanjivg)（Copyright © Ulrich Apel、CC BY-SA 3.0）、テスト用の音訓・用例は [文化庁「常用漢字表の音訓索引」](https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/joyokanjisakuin/) に基づきます。詳細は `THIRD_PARTY_LICENSES.md` と `public/data/KANJIVG_COPYING` を参照してください。アプリのソースコードはMIT Licenseです。
 
 ## 保守方針
 

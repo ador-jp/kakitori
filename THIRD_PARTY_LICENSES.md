@@ -11,15 +11,13 @@
 
 本アプリは KanjiVG のSVGを文字別に抽出して再配布します。当該データおよびその派生物には CC BY-SA 3.0 が適用されます。変更した場合は同一ライセンスで提供し、KanjiVG と著作者を表示してください。
 
-## Unicode Unihan
+## 文化庁「常用漢字表の音訓索引」
 
-- 対象: `public/data/readings.json`（テスト問題用の読み）
-- Copyright © 1991–2026 Unicode, Inc.
-- 出典: https://www.unicode.org/charts/unihan.html
-- ライセンス: Unicode License v3
-- ライセンス本文: `public/data/UNICODE_LICENSE.txt`
+- 対象: `public/data/prompts.json`（テスト問題用の音訓・用例）
+- 出典: https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/joyokanjisakuin/
+- 根拠: 常用漢字表（平成22年内閣告示第2号）
 
-常用漢字に対応する `kJapanese` の読みだけを抽出して再配布します。`npm run update:readings` で最新版から更新できます。
+文化庁が示す常用漢字表内の音訓と用例から、各字のテスト問題を生成しています。例文は同音異義語を区別できるよう用例を穴埋め化し、一部の単独用例だけ本アプリ用の短文を補っています。`npm run update:prompts` で公開表から更新できます。
 
 ## 開発依存関係
 
