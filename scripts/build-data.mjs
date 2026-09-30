@@ -3,6 +3,7 @@ import path from 'node:path';
 const root = path.resolve(import.meta.dirname, '..');
 if (process.argv.includes('--check')) {
   const meta = JSON.parse(fs.readFileSync(path.join(root, 'public/data/meta.json'), 'utf8'));
+  const readings = JSON.parse(fs.readFileSync(path.join(root, 'public/data/readings.json'), 'utf8'));
   const expected = { e1: 80, e2: 160, e3: 200, e4: 202, e5: 193, e6: 191, joyo: 2136 };
   const issues = [];
   for (const [grade, count] of Object.entries(expected)) {
@@ -10,6 +11,7 @@ if (process.argv.includes('--check')) {
     if (new Set(meta[grade]).size !== meta[grade]?.length) issues.push(`${grade}: 重複`);
   }
   for (const char of meta.joyo) {
+    if (!readings[char]) issues.push(`読みデータなし: ${char}`);
     const file = path.join(root, 'public/data/kanji', `${char.codePointAt(0).toString(16).padStart(5, '0')}.svg`);
     if (!fs.existsSync(file) || !/<path[\s>]/.test(fs.readFileSync(file, 'utf8'))) issues.push(`筆順データ不正: ${char}`);
   }

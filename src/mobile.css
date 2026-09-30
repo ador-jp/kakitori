@@ -1,3 +1,9 @@
 body{padding-bottom:env(safe-area-inset-bottom)}
 header{padding-top:calc(2rem + env(safe-area-inset-top))}
 .compact{padding-top:calc(.7rem + env(safe-area-inset-top))}
+.compact{padding-left:max(1rem,calc((100% - 1100px)/2))}
+.compact::after{display:none}
+.test-question{max-width:700px;margin:1rem auto;padding:1rem;text-align:center;background:#fff;border:2px solid #176b5b;border-radius:15px}
+.test-question h2,.test-question p{margin:.2rem}
+.test-question strong{display:block;font-size:1.2rem}
+.test-question.answered{border-color:#168257;background:#effaf4}

@@ -11,6 +11,16 @@
 
 本アプリは KanjiVG のSVGを文字別に抽出して再配布します。当該データおよびその派生物には CC BY-SA 3.0 が適用されます。変更した場合は同一ライセンスで提供し、KanjiVG と著作者を表示してください。
 
+## Unicode Unihan
+
+- 対象: `public/data/readings.json`（テスト問題用の読み）
+- Copyright © 1991–2026 Unicode, Inc.
+- 出典: https://www.unicode.org/charts/unihan.html
+- ライセンス: Unicode License v3
+- ライセンス本文: `public/data/UNICODE_LICENSE.txt`
+
+常用漢字に対応する `kJapanese` の読みだけを抽出して再配布します。`npm run update:readings` で最新版から更新できます。
+
 ## 開発依存関係
 
 Vite、TypeScript、Vitest、vite-plugin-pwa は成果物生成とテストに使用します。各パッケージのライセンスは `node_modules/*/LICENSE*` および `package-lock.json` の固定バージョンを参照してください。実行時に外部サービスへ接続する依存関係はありません。
