@@ -5,6 +5,7 @@ import { clearProgress, loadProgress, saveResult } from './storage';
 import { registerSW } from 'virtual:pwa-register';
 import { modeForKanjiSelection, randomItem, selectRandom } from './selection';
 import { loadSlowDemo, saveSlowDemo } from './preferences';
+import { createLatestLoad } from './latestLoad';
 
 type Meta = Record<string, string[]>;
 type Prompts = Record<string, { reading: string; example: string }>;
@@ -13,6 +14,7 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
 let meta: Meta, prompts: Prompts, grade = 'e1', selected = '', mode = 'free', strokes: Stroke[] = [], reference: Stroke[] = [], showModel = true, debug = new URLSearchParams(location.search).has('debug');
 let testQueue: string[] = [], testIndex = 0, testScores: Array<number | undefined> = [];
 let slowDemo = loadSlowDemo();
+const referenceLoad = createLatestLoad(loadReference, value => { reference = value; renderPractice(); }, error => { app.innerHTML = `<p role="alert">${(error as Error).message}</p>`; });
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) registerSW({ immediate: true });
 
@@ -27,11 +29,13 @@ async function loadReference(char: string) {
   svg.style.position = 'absolute'; svg.style.visibility = 'hidden';
   const paths = [...doc.querySelectorAll('path')].map(p => { const copy = document.createElementNS(svg.namespaceURI, 'path') as SVGPathElement; copy.setAttribute('d', p.getAttribute('d') || ''); svg.append(copy); return copy; });
   document.body.append(svg);
-  reference = paths.map(path => Array.from({ length: 48 }, (_, i) => { const p = path.getPointAtLength(path.getTotalLength() * i / 47); return { x: p.x / 109, y: p.y / 109 }; }));
+  const result = paths.map(path => Array.from({ length: 48 }, (_, i) => { const p = path.getPointAtLength(path.getTotalLength() * i / 47); return { x: p.x / 109, y: p.y / 109 }; }));
   svg.remove();
+  return result;
 }
 
 function home() {
+  referenceLoad.invalidate();
   selected = ''; testQueue = [];
   app.innerHTML = `<header><h1>かきとり</h1><p>書き順を見ながら、漢字を楽しく練習しよう</p></header><main>
     <section aria-labelledby="grade-title"><h2 id="grade-title">学年を選んでください</h2><div class="grade-grid">${Object.entries(labels).map(([key, label]) => `<button class="grade" data-grade="${key}">${label}<small>${meta[key].length}字</small></button>`).join('')}</div></section>
@@ -43,6 +47,7 @@ function home() {
 
 function choose(key: string) { grade = key; testQueue = []; setQuery({ grade }); list(labels[key], meta[key]); }
 function list(title: string, chars: string[]) {
+  referenceLoad.invalidate();
   app.innerHTML = `<header class="compact"><button class="back" aria-label="ホームへ戻る">← ホーム</button><h1>${title}</h1></header><main><section><h2>練習する漢字を選んでください</h2>${grade.startsWith('j') ? '<p class="notice">中学校には公式の学年別配当がないため、常用漢字の学習用参考区分です。</p>' : ''}<div class="filters"><label>漢字を検索 <input id="search" maxlength="1" inputmode="text" placeholder="例：海"></label><label>番号 <input id="from" type="number" min="1" value="1"> 〜 <input id="to" type="number" min="1" value="${Math.min(25, chars.length)}"></label><button id="range">しぼりこむ</button><button id="random" ${chars.length ? '' : 'disabled'}>ランダム練習</button></div><div class="test-maker"><h3>範囲からテストを作る</h3><label>出題数 <input id="test-count" type="number" min="1" value="5"> 問</label><button id="start-test" class="primary">この範囲からテスト</button><p id="test-error" role="alert"></p></div><p id="count">${chars.length}字</p>${chars.length ? '' : '<p class="hint">練習する漢字はまだありません。</p>'}<div class="kanji-grid">${chars.map((k, i) => `<button data-kanji="${k}" aria-label="${k}を練習"><span>${k}</span><small>${i + 1}</small></button>`).join('')}</div></section></main>`;
   app.querySelector<HTMLButtonElement>('.back')!.onclick = home;
   const buttons = [...app.querySelectorAll<HTMLButtonElement>('[data-kanji]')];
@@ -59,9 +64,10 @@ function list(title: string, chars: string[]) {
 }
 
 async function practice(char: string) {
-  selected = char; strokes = []; showModel = mode !== 'test'; setQuery({ grade, ...(mode === 'test' ? {} : { kanji: char }), mode, ...(debug ? { debug: '1' } : {}) });
-  try { await loadReference(char); } catch (e) { app.innerHTML = `<p role="alert">${(e as Error).message}</p>`; return; }
-  renderPractice();
+  selected = char; strokes = []; reference = []; showModel = mode !== 'test'; setQuery({ grade, ...(mode === 'test' ? {} : { kanji: char }), mode, ...(debug ? { debug: '1' } : {}) });
+  app.innerHTML = '<header class="compact"><button class="back">← 漢字一覧</button><h1>読み込み中</h1></header><main><p role="status">お手本を読み込んでいます…</p></main>';
+  app.querySelector<HTMLButtonElement>('.back')!.onclick = () => choose(grade);
+  await referenceLoad.run(char);
 }
 
 function referencePaths(animated = false) { return reference.map((s, i) => `<polyline class="ref ${animated ? 'animate' : ''}" style="--i:${i}" points="${s.map(p => `${p.x * 100},${p.y * 100}`).join(' ')}"/><text class="number" x="${s[0].x * 100}" y="${s[0].y * 100}">${i + 1}</text>`).join(''); }
@@ -81,7 +87,7 @@ function renderPractice(result?: Evaluation) {
   app.querySelector<HTMLButtonElement>('#undo')!.onclick = () => { strokes.pop(); renderPractice(); };
   app.querySelector<HTMLButtonElement>('#clear')!.onclick = () => { strokes = []; renderPractice(); };
   const modelButton = app.querySelector<HTMLButtonElement>('#model'); if (modelButton) modelButton.onclick = showDemo;
-  app.querySelector<HTMLButtonElement>('#judge')!.onclick = e => { const button = e.currentTarget as HTMLButtonElement; button.disabled = true; button.textContent = '判定中…'; requestAnimationFrame(() => { try { const r = evaluate(strokes, reference); if (!isScored(r)) { button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = r.messages[0]; return; } if (testQueue.length) testScores[testIndex] = r.total; showModel = true; renderPractice(r); saveResult(selected, r.total); requestAnimationFrame(() => app.querySelector<HTMLElement>('.result')?.focus()); } catch (error) { console.error(error); button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = '判定できませんでした。もう一度押してください。'; } }); };
+  app.querySelector<HTMLButtonElement>('#judge')!.onclick = e => { const button = e.currentTarget as HTMLButtonElement; button.disabled = true; button.textContent = '判定中…'; requestAnimationFrame(() => { if (app.querySelector('#judge') !== button) return; try { const r = evaluate(strokes, reference); if (!isScored(r)) { button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = r.messages[0]; return; } if (testQueue.length) testScores[testIndex] = r.total; showModel = true; renderPractice(r); saveResult(selected, r.total); requestAnimationFrame(() => app.querySelector<HTMLElement>('.result')?.focus()); } catch (error) { console.error(error); button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = '判定できませんでした。もう一度押してください。'; } }); };
   app.querySelector<HTMLButtonElement>('#next')!.onclick = next;
 }
 
@@ -106,7 +112,7 @@ function showDemo() {
 }
 
 function next() { if (testQueue.length) { if (++testIndex >= testQueue.length) showTestSummary(); else practice(testQueue[testIndex]); return; } const chars = meta[grade] || meta.joyo, i = chars.indexOf(selected); practice(chars[(i + 1) % chars.length]); }
-function showTestSummary() { const answered = testScores.filter((score): score is number => score !== undefined), average = answered.length ? Math.round(answered.reduce((a, b) => a + b, 0) / answered.length) : 0; app.innerHTML = `<header class="compact"><button class="back">← 漢字一覧</button><h1>テスト結果</h1></header><main><section class="test-summary"><h2>平均 ${average}点</h2><p>${answered.length} / ${testQueue.length}問を判定しました</p><div class="test-results">${testQueue.map((char, i) => `<span><b>${char}</b>${testScores[i] === undefined ? '未判定' : `${testScores[i]}点`}</span>`).join('')}</div><div class="actions"><button id="retry">同じ漢字でもう一度</button><button id="finish" class="primary">漢字一覧へ</button></div></section></main>`; app.querySelector<HTMLButtonElement>('.back')!.onclick = () => choose(grade); app.querySelector<HTMLButtonElement>('#finish')!.onclick = () => choose(grade); app.querySelector<HTMLButtonElement>('#retry')!.onclick = () => { testScores = Array(testQueue.length); testIndex = 0; mode = 'test'; practice(testQueue[0]); }; }
-function progressView() { const rows = Object.entries(loadProgress()); app.innerHTML = `<header class="compact"><button class="back">← ホーム</button><h1>これまでの練習</h1></header><main><table><thead><tr><th>漢字</th><th>練習回数</th><th>最新</th><th>最高点</th></tr></thead><tbody>${rows.map(([k, p]) => `<tr><th>${k}</th><td>${p.attempts}回</td><td>${p.latest}点</td><td>${p.best}点</td></tr>`).join('') || '<tr><td colspan="4">まだ記録がありません</td></tr>'}</tbody></table><button id="erase" class="danger">学習記録を消す</button></main>`; app.querySelector<HTMLButtonElement>('.back')!.onclick = home; app.querySelector<HTMLButtonElement>('#erase')!.onclick = () => { if (confirm('この端末の学習記録をすべて消しますか？')) { clearProgress(); progressView(); } }; }
+function showTestSummary() { referenceLoad.invalidate(); const answered = testScores.filter((score): score is number => score !== undefined), average = answered.length ? Math.round(answered.reduce((a, b) => a + b, 0) / answered.length) : 0; app.innerHTML = `<header class="compact"><button class="back">← 漢字一覧</button><h1>テスト結果</h1></header><main><section class="test-summary"><h2>平均 ${average}点</h2><p>${answered.length} / ${testQueue.length}問を判定しました</p><div class="test-results">${testQueue.map((char, i) => `<span><b>${char}</b>${testScores[i] === undefined ? '未判定' : `${testScores[i]}点`}</span>`).join('')}</div><div class="actions"><button id="retry">同じ漢字でもう一度</button><button id="finish" class="primary">漢字一覧へ</button></div></section></main>`; app.querySelector<HTMLButtonElement>('.back')!.onclick = () => choose(grade); app.querySelector<HTMLButtonElement>('#finish')!.onclick = () => choose(grade); app.querySelector<HTMLButtonElement>('#retry')!.onclick = () => { testScores = Array(testQueue.length); testIndex = 0; mode = 'test'; practice(testQueue[0]); }; }
+function progressView() { referenceLoad.invalidate(); const rows = Object.entries(loadProgress()); app.innerHTML = `<header class="compact"><button class="back">← ホーム</button><h1>これまでの練習</h1></header><main><table><thead><tr><th>漢字</th><th>練習回数</th><th>最新</th><th>最高点</th></tr></thead><tbody>${rows.map(([k, p]) => `<tr><th>${k}</th><td>${p.attempts}回</td><td>${p.latest}点</td><td>${p.best}点</td></tr>`).join('') || '<tr><td colspan="4">まだ記録がありません</td></tr>'}</tbody></table><button id="erase" class="danger">学習記録を消す</button></main>`; app.querySelector<HTMLButtonElement>('.back')!.onclick = home; app.querySelector<HTMLButtonElement>('#erase')!.onclick = () => { if (confirm('この端末の学習記録をすべて消しますか？')) { clearProgress(); progressView(); } }; }
 
 Promise.all([fetch('./data/meta.json').then(r => r.json()), fetch('./data/prompts.json').then(r => r.json())]).then(([data, promptData]: [Meta, Prompts]) => { meta = data; prompts = promptData; const q = new URLSearchParams(location.search); grade = meta[q.get('grade') || ''] ? q.get('grade')! : 'e1'; mode = ['free', 'order', 'test'].includes(q.get('mode') || '') ? q.get('mode')! : 'free'; const char = q.get('kanji'); char && meta.joyo.includes(char) ? practice(char) : q.has('grade') ? choose(grade) : home(); }).catch(() => app.innerHTML = '<p role="alert">データを読み込めませんでした。ページを再読み込みしてください。</p>');
