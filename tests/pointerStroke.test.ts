@@ -59,6 +59,21 @@ describe('single pointer strokes', () => {
     expect(drawing.down(second, end)).toBe(true);
   });
 
+  it('preserves other strokes and resets when the active stroke was already removed', () => {
+    const { strokes, drawing } = setup();
+    drawing.down(first, start);
+    drawing.up(first);
+    drawing.down(first, end);
+    strokes.pop();
+    expect(drawing.cancel(first)).toBe(true);
+    expect(strokes).toEqual([[start]]);
+    expect(drawing.move(first, end)).toBe(false);
+    expect(drawing.up(first)).toBe(false);
+    expect(drawing.cancel(first)).toBe(false);
+    expect(drawing.down(second, end)).toBe(true);
+    expect(strokes).toEqual([[start], [end]]);
+  });
+
   it('does not discard a completed stroke on subsequent capture loss', () => {
     const { strokes, drawing } = setup();
     drawing.down(first, start);

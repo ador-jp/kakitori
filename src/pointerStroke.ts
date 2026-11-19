@@ -29,7 +29,8 @@ export function createPointerStroke(strokes: Stroke[]) {
     },
     cancel(event: Pick<Pointer, 'pointerId'>) {
       if (event.pointerId !== activeId || !current) return false;
-      strokes.splice(strokes.indexOf(current), 1);
+      const index = strokes.indexOf(current);
+      if (index !== -1) strokes.splice(index, 1);
       activeId = null;
       current = null;
       return true;
