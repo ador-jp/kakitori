@@ -81,7 +81,7 @@ function renderPractice(result?: Evaluation) {
   app.querySelector<HTMLButtonElement>('#undo')!.onclick = () => { strokes.pop(); renderPractice(); };
   app.querySelector<HTMLButtonElement>('#clear')!.onclick = () => { strokes = []; renderPractice(); };
   const modelButton = app.querySelector<HTMLButtonElement>('#model'); if (modelButton) modelButton.onclick = showDemo;
-  app.querySelector<HTMLButtonElement>('#judge')!.onclick = e => { const button = e.currentTarget as HTMLButtonElement; button.disabled = true; button.textContent = '判定中…'; requestAnimationFrame(() => { try { const r = evaluate(strokes, reference); if (testQueue.length) testScores[testIndex] = r.total; showModel = true; renderPractice(r); if (isScored(r)) saveResult(selected, r.total); requestAnimationFrame(() => app.querySelector<HTMLElement>('.result')?.focus()); } catch (error) { console.error(error); button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = '判定できませんでした。もう一度押してください。'; } }); };
+  app.querySelector<HTMLButtonElement>('#judge')!.onclick = e => { const button = e.currentTarget as HTMLButtonElement; button.disabled = true; button.textContent = '判定中…'; requestAnimationFrame(() => { try { const r = evaluate(strokes, reference); if (!isScored(r)) { button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = r.messages[0]; return; } if (testQueue.length) testScores[testIndex] = r.total; showModel = true; renderPractice(r); saveResult(selected, r.total); requestAnimationFrame(() => app.querySelector<HTMLElement>('.result')?.focus()); } catch (error) { console.error(error); button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = '判定できませんでした。もう一度押してください。'; } }); };
   app.querySelector<HTMLButtonElement>('#next')!.onclick = next;
 }
 
@@ -93,7 +93,7 @@ function bindCanvas() {
   board.onpointerup = () => { if (!current) return; current = null; const i = strokes.length - 1; const partial = reference[i] ? evaluate([strokes[i]], [reference[i]]).strokes[0] : null; app.querySelector('#hint')!.textContent = partial && partial.score >= 45 ? `${i + 1}画目：OK！` : reference[i] ? `${i + 1}画目：お手本と見くらべよう` : '画数が多いようです'; };
 }
 
-function resultHtml(r: Evaluation) { return `<section class="result ${r.passed ? 'passed' : 'needs-work'}" tabindex="-1" role="status"><h2>${r.passed ? '◎ ' : ''}${r.total}点</h2><p>${r.passed ? 'たいへんよくできました！' : (isScored(r) ? '赤い線のところを、お手本と見くらべよう' : 'もう一度書いてみよう')}</p><div class="scores"><span>書き順 <b>${r.order}点</b></span><span>書く方向 <b>${r.direction}点</b></span><span>位置 <b>${r.position}点</b></span><span>形 <b>${r.shape}点</b></span></div><ul>${r.messages.map(m => `<li>${m}</li>`).join('')}</ul></section>`; }
+function resultHtml(r: Evaluation) { return `<section class="result ${r.passed ? 'passed' : 'needs-work'}" tabindex="-1" role="status"><h2>${r.passed ? '◎ ' : ''}${r.total}点</h2><p>${r.passed ? 'たいへんよくできました！' : '赤い線のところを、お手本と見くらべよう'}</p><div class="scores"><span>書き順 <b>${r.order}点</b></span><span>書く方向 <b>${r.direction}点</b></span><span>位置 <b>${r.position}点</b></span><span>形 <b>${r.shape}点</b></span></div><ul>${r.messages.map(m => `<li>${m}</li>`).join('')}</ul></section>`; }
 function debugHtml(r?: Evaluation) { return `<details class="debug" open><summary>開発者用デバッグ</summary><p>実線：入力／点線：お手本　採点結果：${r ? escapeHtml(JSON.stringify(r.strokes)) : '未判定'}</p><svg viewBox="0 0 100 100">${referencePaths()}${studentPaths()}</svg></details>`; }
 
 function showDemo() {
