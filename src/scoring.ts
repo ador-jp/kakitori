@@ -51,7 +51,13 @@ function identityError(a: Stroke, e: Stroke): number {
   return Math.min(forward, distance(a[0], reverse[0]) + distance(a.at(-1)!, reverse.at(-1)!) + shapeError(a, reverse));
 }
 
+export const isScored = (r: Evaluation): boolean => r.strokes.length > 0;
+
 export function evaluate(actualRaw: Stroke[], expectedRaw: Stroke[]): Evaluation {
+  if (!expectedRaw.length || !actualRaw.length) {
+    const messages = [!expectedRaw.length ? 'お手本を読み込めませんでした。ページを再読み込みしてください。' : '枠の中に漢字を書いてから判定してください。'];
+    return { total: 0, order: 0, direction: 0, position: 0, shape: 0, passed: false, strokes: [], messages };
+  }
   const actual = normalize(actualRaw), expected = normalize(expectedRaw);
   const n = Math.min(actual.length, expected.length);
   const results: StrokeResult[] = [];

@@ -1,6 +1,6 @@
 import './style.css';
 import './mobile.css';
-import { evaluate, type Evaluation, type Point, type Stroke } from './scoring';
+import { evaluate, isScored, type Evaluation, type Point, type Stroke } from './scoring';
 import { clearProgress, loadProgress, saveResult } from './storage';
 import { registerSW } from 'virtual:pwa-register';
 import { selectRandom } from './selection';
@@ -81,7 +81,7 @@ function renderPractice(result?: Evaluation) {
   app.querySelector<HTMLButtonElement>('#undo')!.onclick = () => { strokes.pop(); renderPractice(); };
   app.querySelector<HTMLButtonElement>('#clear')!.onclick = () => { strokes = []; renderPractice(); };
   const modelButton = app.querySelector<HTMLButtonElement>('#model'); if (modelButton) modelButton.onclick = showDemo;
-  app.querySelector<HTMLButtonElement>('#judge')!.onclick = e => { const button = e.currentTarget as HTMLButtonElement; button.disabled = true; button.textContent = '判定中…'; requestAnimationFrame(() => { try { const r = evaluate(strokes, reference); if (testQueue.length) testScores[testIndex] = r.total; showModel = true; renderPractice(r); saveResult(selected, r.total); requestAnimationFrame(() => app.querySelector<HTMLElement>('.result')?.focus()); } catch (error) { console.error(error); button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = '判定できませんでした。もう一度押してください。'; } }); };
+  app.querySelector<HTMLButtonElement>('#judge')!.onclick = e => { const button = e.currentTarget as HTMLButtonElement; button.disabled = true; button.textContent = '判定中…'; requestAnimationFrame(() => { try { const r = evaluate(strokes, reference); if (!isScored(r)) { button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = r.messages[0]; return; } if (testQueue.length) testScores[testIndex] = r.total; showModel = true; renderPractice(r); saveResult(selected, r.total); requestAnimationFrame(() => app.querySelector<HTMLElement>('.result')?.focus()); } catch (error) { console.error(error); button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = '判定できませんでした。もう一度押してください。'; } }); };
   app.querySelector<HTMLButtonElement>('#next')!.onclick = next;
 }
 

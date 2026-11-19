@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { directionScore, evaluate, normalize, resample, type Stroke } from '../src/scoring';
+import { directionScore, evaluate, isScored, normalize, resample, type Stroke } from '../src/scoring';
 
 const horizontal: Stroke = [{ x: 10, y: 20 }, { x: 50, y: 20 }, { x: 90, y: 20 }];
 const vertical: Stroke = [{ x: 50, y: 10 }, { x: 50, y: 90 }];
@@ -10,6 +10,18 @@ describe('筆順判定', () => {
   it('逆方向を検出する', () => expect(directionScore([...horizontal].reverse(), horizontal)).toBe(0));
   it('正しい入力を高く評価する', () => expect(evaluate([horizontal, vertical], [horizontal, vertical]).total).toBeGreaterThan(85));
   it('正しい入力を合格にして褒める', () => { const result = evaluate([horizontal, vertical], [horizontal, vertical]); expect(result.passed).toBe(true); expect(result.messages[0]).toContain('すばらしい'); });
+  it.each<{ actual: Stroke[]; expected: Stroke[]; message: string }>([
+    { actual: [], expected: [], message: 'お手本を読み込めませんでした' },
+    { actual: [horizontal], expected: [], message: 'お手本を読み込めませんでした' },
+    { actual: [], expected: [horizontal], message: '漢字を書いてから' },
+  ])('入力やお手本がない場合は0点で不合格にする: $message', ({ actual, expected, message }) => {
+    const result = evaluate(actual, expected);
+    expect(result).toMatchObject({ total: 0, order: 0, direction: 0, position: 0, shape: 0, passed: false, strokes: [] });
+    expect(result.messages.join()).toContain(message);
+    expect(result.messages.join()).not.toContain('すばらしい');
+    expect(isScored(result)).toBe(false);
+  });
+  it('通常の入力は採点済みとして記録対象にする', () => expect(isScored(evaluate([vertical], [horizontal]))).toBe(true));
   it('子どもの小さなずれを許容する', () => expect(evaluate([[{ x: 11, y: 22 }, { x: 91, y: 21 }]], [horizontal]).total).toBeGreaterThan(60));
   it('始点・終点の大きなずれを下げる', () => expect(evaluate([[{ x: 50, y: 20 }, { x: 90, y: 20 }], vertical], [horizontal, vertical]).position).toBeLessThan(90));
   it('全く異なる軌跡を下げる', () => expect(evaluate([vertical], [horizontal]).shape).toBeLessThan(60));
