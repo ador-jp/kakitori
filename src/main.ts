@@ -3,7 +3,7 @@ import './mobile.css';
 import { evaluate, isScored, type Evaluation, type Point, type Stroke } from './scoring';
 import { clearProgress, loadProgress, saveResult } from './storage';
 import { registerSW } from 'virtual:pwa-register';
-import { selectRandom } from './selection';
+import { modeForKanjiSelection, selectRandom } from './selection';
 import { loadSlowDemo, saveSlowDemo } from './preferences';
 
 type Meta = Record<string, string[]>;
@@ -46,10 +46,10 @@ function list(title: string, chars: string[]) {
   app.innerHTML = `<header class="compact"><button class="back" aria-label="ホームへ戻る">← ホーム</button><h1>${title}</h1></header><main><section><h2>練習する漢字を選んでください</h2>${grade.startsWith('j') ? '<p class="notice">中学校には公式の学年別配当がないため、常用漢字の学習用参考区分です。</p>' : ''}<div class="filters"><label>漢字を検索 <input id="search" maxlength="1" inputmode="text" placeholder="例：海"></label><label>番号 <input id="from" type="number" min="1" value="1"> 〜 <input id="to" type="number" min="1" value="${Math.min(25, chars.length)}"></label><button id="range">しぼりこむ</button><button id="random">ランダム練習</button></div><div class="test-maker"><h3>範囲からテストを作る</h3><label>出題数 <input id="test-count" type="number" min="1" value="5"> 問</label><button id="start-test" class="primary">この範囲からテスト</button><p id="test-error" role="alert"></p></div><p id="count">${chars.length}字</p><div class="kanji-grid">${chars.map((k, i) => `<button data-kanji="${k}" aria-label="${k}を練習"><span>${k}</span><small>${i + 1}</small></button>`).join('')}</div></section></main>`;
   app.querySelector<HTMLButtonElement>('.back')!.onclick = home;
   const buttons = [...app.querySelectorAll<HTMLButtonElement>('[data-kanji]')];
-  buttons.forEach(b => b.onclick = () => { testQueue = []; practice(b.dataset.kanji!); });
+  buttons.forEach(b => b.onclick = () => { testQueue = []; mode = modeForKanjiSelection(mode); practice(b.dataset.kanji!); });
   app.querySelector<HTMLInputElement>('#search')!.oninput = e => { const q = (e.target as HTMLInputElement).value; buttons.forEach(b => b.hidden = !!q && b.dataset.kanji !== q); };
   app.querySelector<HTMLButtonElement>('#range')!.onclick = () => { const from = Number((app.querySelector('#from') as HTMLInputElement).value || 1), to = Number((app.querySelector('#to') as HTMLInputElement).value || chars.length); buttons.forEach((b, i) => b.hidden = i + 1 < from || i + 1 > to); };
-  app.querySelector<HTMLButtonElement>('#random')!.onclick = () => { testQueue = []; practice(chars[Math.floor(Math.random() * chars.length)]); };
+  app.querySelector<HTMLButtonElement>('#random')!.onclick = () => { testQueue = []; mode = modeForKanjiSelection(mode); practice(chars[Math.floor(Math.random() * chars.length)]); };
   app.querySelector<HTMLButtonElement>('#start-test')!.onclick = () => {
     const from = Number((app.querySelector('#from') as HTMLInputElement).value), to = Number((app.querySelector('#to') as HTMLInputElement).value), count = Number((app.querySelector('#test-count') as HTMLInputElement).value), error = app.querySelector<HTMLElement>('#test-error')!;
     if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to > chars.length || from > to) { error.textContent = `番号は1〜${chars.length}の範囲で、最初の番号を小さくしてください。`; return; }
