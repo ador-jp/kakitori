@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { directionScore, evaluate, isScored, normalize, resample, type Stroke } from '../src/scoring';
+import { correctionStrokeIndices, directionScore, evaluate, isScored, normalize, resample, type Stroke } from '../src/scoring';
 
 const horizontal: Stroke = [{ x: 10, y: 20 }, { x: 50, y: 20 }, { x: 90, y: 20 }];
 const vertical: Stroke = [{ x: 50, y: 10 }, { x: 50, y: 90 }];
+
+describe('修正するお手本の筆画', () => {
+  it('筆画がなければ修正しない', () => expect(correctionStrokeIndices([])).toEqual([]));
+  it('間違いがなければ修正しない', () => expect(correctionStrokeIndices([{ expected: 0, score: 90 }, { expected: 1, score: 55 }])).toEqual([]));
+  it('後の筆画だけが低得点なら元の番号を使う', () => expect(correctionStrokeIndices([{ expected: 0, score: 90 }, { expected: 1, score: 54 }])).toEqual([1]));
+  it('書き順が違えばその位置のお手本を示す', () => expect(correctionStrokeIndices([{ expected: 0, score: 90 }, { expected: 2, score: 90 }, { expected: 1, score: 90 }])).toEqual([1, 2]));
+  it('書き順と得点の両方が悪くても重複しない', () => expect(correctionStrokeIndices([{ expected: 1, score: 20 }, { expected: 0, score: 20 }])).toEqual([0, 1]));
+});
 
 describe('筆順判定', () => {
   it('座標を0〜1へ正規化する', () => { const n = normalize([horizontal]); expect(n[0][0]).toEqual({ x: 0, y: 0 }); expect(n[0].at(-1)!.x).toBe(1); });
