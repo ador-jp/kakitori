@@ -4,6 +4,7 @@ import { evaluate, type Evaluation, type Point, type Stroke } from './scoring';
 import { clearProgress, loadProgress, saveResult } from './storage';
 import { registerSW } from 'virtual:pwa-register';
 import { selectRandom } from './selection';
+import { loadSlowDemo, saveSlowDemo } from './preferences';
 
 type Meta = Record<string, string[]>;
 type Prompts = Record<string, { reading: string; example: string }>;
@@ -11,7 +12,7 @@ const labels: Record<string, string> = { e1: '小学1年', e2: '小学2年', e3:
 const app = document.querySelector<HTMLDivElement>('#app')!;
 let meta: Meta, prompts: Prompts, grade = 'e1', selected = '', mode = 'free', strokes: Stroke[] = [], reference: Stroke[] = [], showModel = true, debug = new URLSearchParams(location.search).has('debug');
 let testQueue: string[] = [], testIndex = 0, testScores: Array<number | undefined> = [];
-let slowDemo = localStorage.getItem('kakitori-slow-demo') === 'true';
+let slowDemo = loadSlowDemo();
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) registerSW({ immediate: true });
 
@@ -101,7 +102,7 @@ function showDemo() {
   const controls = document.createElement('div'); controls.className = 'demo-controls'; controls.innerHTML = `<button id="replay">最初から</button><button id="pause">一時停止</button><label><input id="slow" type="checkbox" ${slowDemo ? 'checked' : ''}> ゆっくり</label>`; board.parentElement!.after(controls);
   controls.querySelector<HTMLButtonElement>('#replay')!.onclick = showDemo;
   controls.querySelector<HTMLButtonElement>('#pause')!.onclick = e => { board.classList.toggle('paused'); (e.target as HTMLButtonElement).textContent = board.classList.contains('paused') ? '再生' : '一時停止'; };
-  controls.querySelector<HTMLInputElement>('#slow')!.onchange = e => { slowDemo = (e.target as HTMLInputElement).checked; localStorage.setItem('kakitori-slow-demo', String(slowDemo)); board.classList.toggle('slow', slowDemo); };
+  controls.querySelector<HTMLInputElement>('#slow')!.onchange = e => { slowDemo = (e.target as HTMLInputElement).checked; saveSlowDemo(slowDemo); board.classList.toggle('slow', slowDemo); };
 }
 
 function next() { if (testQueue.length) { if (++testIndex >= testQueue.length) showTestSummary(); else practice(testQueue[testIndex]); return; } const chars = meta[grade] || meta.joyo, i = chars.indexOf(selected); practice(chars[(i + 1) % chars.length]); }
