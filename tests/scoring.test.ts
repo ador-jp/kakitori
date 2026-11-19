@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { directionScore, evaluate, normalize, resample, type Stroke } from '../src/scoring';
+import { directionScore, evaluate, isScored, normalize, resample, type Stroke } from '../src/scoring';
 
 const horizontal: Stroke = [{ x: 10, y: 20 }, { x: 50, y: 20 }, { x: 90, y: 20 }];
 const vertical: Stroke = [{ x: 50, y: 10 }, { x: 50, y: 90 }];
@@ -19,7 +19,9 @@ describe('筆順判定', () => {
     expect(result).toMatchObject({ total: 0, order: 0, direction: 0, position: 0, shape: 0, passed: false, strokes: [] });
     expect(result.messages.join()).toContain(message);
     expect(result.messages.join()).not.toContain('すばらしい');
+    expect(isScored(result)).toBe(false);
   });
+  it('通常の入力は採点済みとして記録対象にする', () => expect(isScored(evaluate([vertical], [horizontal]))).toBe(true));
   it('子どもの小さなずれを許容する', () => expect(evaluate([[{ x: 11, y: 22 }, { x: 91, y: 21 }]], [horizontal]).total).toBeGreaterThan(60));
   it('始点・終点の大きなずれを下げる', () => expect(evaluate([[{ x: 50, y: 20 }, { x: 90, y: 20 }], vertical], [horizontal, vertical]).position).toBeLessThan(90));
   it('全く異なる軌跡を下げる', () => expect(evaluate([vertical], [horizontal]).shape).toBeLessThan(60));
