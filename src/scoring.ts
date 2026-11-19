@@ -52,6 +52,10 @@ function identityError(a: Stroke, e: Stroke): number {
 }
 
 export function evaluate(actualRaw: Stroke[], expectedRaw: Stroke[]): Evaluation {
+  if (!expectedRaw.length || !actualRaw.length) {
+    const messages = [!expectedRaw.length ? 'お手本を読み込めませんでした。ページを再読み込みしてください。' : '枠の中に漢字を書いてから判定してください。'];
+    return { total: 0, order: 0, direction: 0, position: 0, shape: 0, passed: false, strokes: [], messages };
+  }
   const actual = normalize(actualRaw), expected = normalize(expectedRaw);
   const n = Math.min(actual.length, expected.length);
   const results: StrokeResult[] = [];
