@@ -1,3 +1,7 @@
+export function modeForKanjiSelection(mode: string): string {
+  return mode === 'test' ? 'free' : mode;
+}
+
 export function selectRandom<T>(items: T[], from: number, to: number, count: number, random = Math.random): T[] {
   const pool = items.slice(from - 1, to);
   for (let i = pool.length - 1; i > 0; i--) {
