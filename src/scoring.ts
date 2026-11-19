@@ -5,6 +5,11 @@ export type Stroke = Point[];
 export type StrokeResult = { expected: number; actual: number; direction: number; start: number; end: number; shape: number; position: number; score: number };
 export type Evaluation = { total: number; order: number; direction: number; position: number; shape: number; passed: boolean; strokes: StrokeResult[]; messages: string[] };
 
+export function correctionStrokeIndices(strokes: Pick<StrokeResult, 'expected' | 'score'>[]): number[] {
+  return [...new Set(strokes.flatMap((r, i) =>
+    r.expected !== i ? [i] : r.score < 55 ? [r.expected] : []))];
+}
+
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 const clampScore = (error: number, tolerance: number) => Math.round(Math.max(0, 100 * (1 - error / tolerance)));
 
