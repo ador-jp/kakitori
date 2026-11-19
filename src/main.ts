@@ -6,6 +6,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { modeForKanjiSelection, randomItem, selectRandom } from './selection';
 import { loadSlowDemo, saveSlowDemo } from './preferences';
 import { createLatestLoad } from './latestLoad';
+import { createPointerStroke } from './pointerStroke';
 
 type Meta = Record<string, string[]>;
 type Prompts = Record<string, { reading: string; example: string }>;
@@ -92,11 +93,13 @@ function renderPractice(result?: Evaluation) {
 }
 
 function bindCanvas() {
-  const board = app.querySelector<SVGSVGElement>('#board')!; let current: Stroke | null = null;
+  const board = app.querySelector<SVGSVGElement>('#board')!, drawing = createPointerStroke(strokes);
   const point = (e: PointerEvent): Point => { const r = board.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) }; };
-  board.onpointerdown = e => { e.preventDefault(); board.setPointerCapture(e.pointerId); current = [point(e)]; strokes.push(current); };
-  board.onpointermove = e => { if (!current) return; e.preventDefault(); const p = point(e); if (Math.hypot(p.x - current.at(-1)!.x, p.y - current.at(-1)!.y) > .004) { current.push(p); app.querySelectorAll('.student').forEach(n => n.remove()); board.insertAdjacentHTML('beforeend', studentPaths()); } };
-  board.onpointerup = () => { if (!current) return; current = null; const i = strokes.length - 1; const partial = reference[i] ? evaluate([strokes[i]], [reference[i]]).strokes[0] : null; app.querySelector('#hint')!.textContent = partial && partial.score >= 45 ? `${i + 1}画目：OK！` : reference[i] ? `${i + 1}画目：お手本と見くらべよう` : '画数が多いようです'; };
+  const redraw = () => { board.querySelectorAll('.student').forEach(n => n.remove()); board.insertAdjacentHTML('beforeend', studentPaths()); };
+  board.onpointerdown = e => { if (!drawing.down(e, point(e))) return; e.preventDefault(); board.setPointerCapture(e.pointerId); };
+  board.onpointermove = e => { if (!drawing.move(e, point(e))) return; e.preventDefault(); redraw(); };
+  board.onpointerup = e => { if (!drawing.up(e)) return; const i = strokes.length - 1; const partial = reference[i] ? evaluate([strokes[i]], [reference[i]]).strokes[0] : null; app.querySelector('#hint')!.textContent = partial && partial.score >= 45 ? `${i + 1}画目：OK！` : reference[i] ? `${i + 1}画目：お手本と見くらべよう` : '画数が多いようです'; };
+  board.onpointercancel = board.onlostpointercapture = e => { if (drawing.cancel(e)) redraw(); };
 }
 
 function resultHtml(r: Evaluation) { return `<section class="result ${r.passed ? 'passed' : 'needs-work'}" tabindex="-1" role="status"><h2>${r.passed ? '◎ ' : ''}${r.total}点</h2><p>${r.passed ? 'たいへんよくできました！' : '赤い線のところを、お手本と見くらべよう'}</p><div class="scores"><span>書き順 <b>${r.order}点</b></span><span>書く方向 <b>${r.direction}点</b></span><span>位置 <b>${r.position}点</b></span><span>形 <b>${r.shape}点</b></span></div><ul>${r.messages.map(m => `<li>${m}</li>`).join('')}</ul></section>`; }
