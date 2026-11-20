@@ -89,8 +89,16 @@ function list(title: string, chars: string[]) {
   app.querySelector<HTMLButtonElement>('.back')!.onclick = home;
   const buttons = [...app.querySelectorAll<HTMLButtonElement>('[data-kanji]')];
   buttons.forEach(b => b.onclick = () => { testQueue = []; mode = modeForKanjiSelection(mode); practice(b.dataset.kanji!); });
-  app.querySelector<HTMLInputElement>('#search')!.oninput = e => { const q = (e.target as HTMLInputElement).value; buttons.forEach(b => b.hidden = !!q && b.dataset.kanji !== q); };
-  app.querySelector<HTMLButtonElement>('#range')!.onclick = () => { const from = Number((app.querySelector('#from') as HTMLInputElement).value || 1), to = Number((app.querySelector('#to') as HTMLInputElement).value || chars.length); buttons.forEach((b, i) => b.hidden = i + 1 < from || i + 1 > to); };
+  let from = 1, to = chars.length;
+  const applyFilters = () => {
+    const q = app.querySelector<HTMLInputElement>('#search')!.value;
+    buttons.forEach((b, i) => b.hidden = (!!q && b.dataset.kanji !== q) || i + 1 < from || i + 1 > to);
+  };
+  app.querySelector<HTMLInputElement>('#search')!.oninput = applyFilters;
+  app.querySelector<HTMLButtonElement>('#range')!.onclick = () => {
+    from = Number((app.querySelector('#from') as HTMLInputElement).value || 1); to = Number((app.querySelector('#to') as HTMLInputElement).value || chars.length);
+    applyFilters();
+  };
   app.querySelector<HTMLButtonElement>('#random')!.onclick = () => { const char = randomItem(chars); if (char === undefined) return; testQueue = []; mode = modeForKanjiSelection(mode); practice(char); };
   app.querySelector<HTMLButtonElement>('#start-test')!.onclick = () => {
     const from = Number((app.querySelector('#from') as HTMLInputElement).value), to = Number((app.querySelector('#to') as HTMLInputElement).value), count = Number((app.querySelector('#test-count') as HTMLInputElement).value), error = app.querySelector<HTMLElement>('#test-error')!;

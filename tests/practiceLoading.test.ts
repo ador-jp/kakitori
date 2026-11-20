@@ -124,6 +124,77 @@ function judge() {
   frames = [];
 }
 
+describe('combined list filters', () => {
+  const visible = () => app.querySelectorAll('[data-kanji]').filter(button => !button.hidden).map(button => (button.dataset as { kanji: string }).kanji);
+  const search = (value: string) => {
+    const input = app.querySelector('#search')!;
+    input.value = value;
+    (input.oninput as (event: unknown) => void)({ target: input });
+  };
+  const range = (from: string, to: string) => {
+    app.querySelector('#from')!.value = from;
+    app.querySelector('#to')!.value = to;
+    app.click('#range');
+  };
+
+  it('combines search then range, including no matches', () => {
+    search('二');
+    expect(visible()).toEqual(['二']);
+    range('1', '1');
+    expect(visible()).toEqual([]);
+    range('2', '2');
+    expect(visible()).toEqual(['二']);
+    expect(app.innerHTML).toContain('<p id="count">2字</p>');
+  });
+  it('combines range then search', () => {
+    range('1', '1');
+    search('二');
+    expect(visible()).toEqual([]);
+    search('一');
+    expect(visible()).toEqual(['一']);
+  });
+  it('clearing search preserves the range', () => {
+    range('1', '1');
+    search('二');
+    search('');
+    expect(visible()).toEqual(['一']);
+  });
+  it('resetting the range preserves search', () => {
+    search('二');
+    range('1', '1');
+    range('1', '2');
+    expect(visible()).toEqual(['二']);
+    range('', '');
+    expect(visible()).toEqual(['二']);
+  });
+  it('keeps search alone and clearing it working', () => {
+    search('二');
+    expect(visible()).toEqual(['二']);
+    search('海');
+    expect(visible()).toEqual([]);
+    search('');
+    expect(visible()).toEqual(['一', '二']);
+  });
+  it('keeps range alone, blank defaults and reversed ranges working', () => {
+    range('2', '2');
+    expect(visible()).toEqual(['二']);
+    range('2', '1');
+    expect(visible()).toEqual([]);
+    range('', '');
+    expect(visible()).toEqual(['一', '二']);
+  });
+  it('does not apply the initial 25-item test range to search until requested', async () => {
+    const chars = Array.from({ length: 30 }, (_, i) => String.fromCodePoint(0x4e00 + i));
+    await restart({ meta: () => Promise.resolve({ ok: true, json: () => ({ e1: chars, joyo: chars }) }) }, '?grade=e1');
+    search(chars[29]);
+    expect(visible()).toEqual([chars[29]]);
+    app.click('#range');
+    expect(visible()).toEqual([]);
+    range('1', '30');
+    expect(visible()).toEqual([chars[29]]);
+  });
+});
+
 describe('per-stroke hints', () => {
   it('logs evaluation errors without throwing or changing the hint', async () => {
     vi.stubGlobal('DOMParser', class { parseFromString() { return { querySelectorAll: () => [{ getAttribute: () => '' }] }; } });
