@@ -304,6 +304,60 @@ describe('new answers after judging', () => {
   });
 });
 
+describe('leaving a range test via mode selection', () => {
+  const changeMode = (mode: string) => {
+    const select = app.querySelector('#mode')!;
+    select.value = mode;
+    (select.onchange as (event: unknown) => void)({ target: select });
+  };
+
+  it.each(['free', 'order'])('ends the test and follows grade order after switching to %s', async mode => {
+    await startTest();
+    drawStroke();
+    judge();
+    expect(app.innerHTML).toContain('テスト 1 / 2問');
+    changeMode(mode);
+    expect(app.querySelector('#mode')!.value).toBe(mode);
+    expect(app.innerHTML).toContain('「一」の練習');
+    expect(app.innerHTML).not.toContain('test-progress');
+    expect(app.querySelector('.result')).toBeNull();
+    const result = vi.mocked(evaluate).mock.results.at(-1)!.value;
+    vi.mocked(evaluate).mockReturnValueOnce({ ...result, total: 12 });
+    judge();
+    judge();
+    expect(saveResult).toHaveBeenCalledTimes(2);
+    expect(saveResult).toHaveBeenLastCalledWith('一', 12);
+    for (const kanji of ['二', '一']) {
+      app.click('#next');
+      loads.at(-1)!.resolve();
+      await settle();
+      expect(app.innerHTML).toContain(`「${kanji}」の練習`);
+      expect(app.innerHTML).not.toContain('test-progress');
+      expect(app.innerHTML).not.toContain('テスト結果');
+    }
+    app.click('.back');
+    await startTest();
+    expect(app.innerHTML).toContain('テスト 1 / 2問');
+    app.click('#next'); loads.at(-1)!.resolve(); await settle();
+    app.click('#next');
+    expect(app.innerHTML).toContain('0 / 2問を判定しました');
+    expect(app.innerHTML).not.toContain('12点');
+    expect(app.innerHTML).not.toContain('85点');
+  });
+
+  it('can end the test from the second question without retaining its index', async () => {
+    await startTest();
+    app.click('#next'); loads.at(-1)!.resolve(); await settle();
+    drawStroke(); judge();
+    changeMode('free');
+    expect(app.innerHTML).toContain('「二」の練習');
+    expect(app.innerHTML).not.toContain('test-progress');
+    app.click('#next'); loads.at(-1)!.resolve(); await settle();
+    expect(app.innerHTML).toContain('「一」の練習');
+    expect(app.innerHTML).not.toContain('テスト結果');
+  });
+});
+
 describe('saving judged attempts', () => {
   beforeEach(async () => {
     app.click('[data-kanji="一"]');
