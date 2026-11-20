@@ -4,7 +4,7 @@ import { saveResult } from '../src/storage';
 
 vi.mock('virtual:pwa-register', () => ({ registerSW: vi.fn() }));
 vi.mock('../src/preferences', () => ({ loadSlowDemo: () => false }));
-vi.mock('../src/selection', () => ({ selectRandom: () => ['一', '二'] }));
+vi.mock('../src/selection', async importOriginal => ({ ...await importOriginal<typeof import('../src/selection')>(), selectRandom: () => ['一', '二'] }));
 vi.mock('../src/storage', () => ({ loadProgress: () => ({}), saveResult: vi.fn() }));
 vi.mock('../src/scoring', () => ({
   evaluate: vi.fn(() => ({ total: 85, strokes: [], messages: [], passed: true })),
@@ -24,12 +24,24 @@ class Screen {
     for (const tag of html.matchAll(/<[^/!][^>]*>/g)) {
       const id = tag[0].match(/id="([^"]+)"/), classes = tag[0].match(/class="([^"]+)"/);
       const node: Node = { value: tag[0].match(/value="([^"]*)"/)?.[1] || '' };
+      node.remove = () => {
+        this.html = this.html.replace(/<section id="prompt-notice"[\s\S]*?<\/section>/, '');
+        this.nodes.delete('#prompt-notice'); this.nodes.delete('#prompt-retry');
+      };
+      if (tag[0].startsWith('<main')) this.nodes.set('main', { value: '', insertAdjacentHTML: (_position: string, content: string) => {
+        const previous = new Map(this.nodes);
+        this.innerHTML = this.html.replace(/(<main[^>]*>)/, `$1${content}`);
+        for (const [key, value] of previous) if (this.nodes.has(key)) this.nodes.set(key, value);
+      } });
+      const kanji = tag[0].match(/data-kanji="([^"]+)"/), grade = tag[0].match(/data-grade="([^"]+)"/);
+      if (kanji) { node.dataset = { kanji: kanji[1] }; this.nodes.set(`[data-kanji="${kanji[1]}"]`, node); }
+      if (grade) { node.dataset = { grade: grade[1] }; this.nodes.set(`[data-grade="${grade[1]}"]`, node); }
       if (id) this.nodes.set(`#${id[1]}`, node);
       if (classes) for (const name of classes[1].split(' ')) this.nodes.set(`.${name}`, node);
     }
   }
   querySelector(selector: string) { return this.nodes.get(selector) || null; }
-  querySelectorAll() { return []; }
+  querySelectorAll(selector: string) { return [...this.nodes].filter(([key]) => key.startsWith(selector.slice(0, -1) + '=')).map(([, node]) => node); }
   click(selector: string) {
     const node = this.querySelector(selector)!;
     node.onclick!({ currentTarget: node });
@@ -58,8 +70,8 @@ beforeEach(async () => {
   });
   vi.stubGlobal('DOMParser', class { parseFromString() { return { querySelectorAll: () => [] }; } });
   vi.stubGlobal('fetch', vi.fn((url: string) => {
-    if (url.endsWith('meta.json')) return Promise.resolve({ json: () => ({ e1: ['一', '二'], e2: [], e3: [], e4: [], e5: [], e6: [], j1: [], j2: [], j3: [], joyo: ['一', '二'] }) });
-    if (url.endsWith('prompts.json')) return Promise.resolve({ json: () => ({ 一: { reading: 'いち', example: '一' }, 二: { reading: 'に', example: '二' } }) });
+    if (url.endsWith('meta.json')) return Promise.resolve({ ok: true, json: () => ({ e1: ['一', '二'], e2: [], e3: [], e4: [], e5: [], e6: [], j1: [], j2: [], j3: [], joyo: ['一', '二'] }) });
+    if (url.endsWith('prompts.json')) return Promise.resolve({ ok: true, json: () => ({ 一: { reading: 'いち', example: '一' }, 二: { reading: 'に', example: '二' } }) });
     return new Promise((resolve, reject) => loads.push({ resolve: () => resolve({ ok: true, text: () => '' }), reject }));
   }));
   await import('../src/main');
@@ -75,6 +87,163 @@ async function startTest() {
   loads.at(-1)!.resolve();
   await settle();
 }
+
+async function restart(overrides: { prompts?: () => Promise<unknown>; meta?: () => Promise<unknown> }, search = '') {
+  vi.resetModules();
+  app = new Screen(); loads = [];
+  vi.stubGlobal('location', { search, protocol: 'file:' });
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.endsWith('prompts.json') && overrides.prompts) return overrides.prompts();
+    if (url.endsWith('meta.json') && overrides.meta) return overrides.meta();
+    return original(url);
+  }));
+  await import('../src/main');
+  await settle();
+}
+
+const promptMessage = 'テスト問題を読み込めませんでした。通信状態を確認して、もう一度お試しください。';
+const promptResponse = () => Promise.resolve({ ok: true, json: () => ({ 一: { reading: 'いち', example: '一' }, 二: { reading: 'に', example: '二' } }) });
+
+describe('independent prompt loading', () => {
+  it('renders home before prompts settle and allows free and order practice after a prompt failure', async () => {
+    let rejectPrompts!: (error: Error) => void;
+    await restart({ prompts: () => new Promise((_resolve, reject) => { rejectPrompts = reject; }) });
+    expect(app.innerHTML).toContain('学年を選んでください');
+    const error = new Error('Failed to fetch');
+    rejectPrompts(error);
+    await settle();
+    expect(console.error).toHaveBeenCalledWith(error);
+    expect(app.innerHTML).not.toContain(error.message);
+    app.click('[data-grade="e1"]');
+    app.click('[data-kanji="一"]');
+    loads[0].resolve();
+    await settle();
+    expect(app.innerHTML).toContain('「一」の練習');
+    expect(app.querySelector('#mode')!.value).toBe('free');
+    const select = app.querySelector('#mode')!;
+    select.value = 'order';
+    (select.onchange as (event: unknown) => void)({ target: select });
+    expect(app.querySelector('#mode')!.value).toBe('order');
+    expect(app.querySelector('#judge')).not.toBeNull();
+  });
+
+  it('blocks a range test with a fixed notice and retries into the requested test', async () => {
+    let available = false;
+    await restart({ prompts: () => available ? promptResponse() : Promise.reject(new Error('offline')) }, '?grade=e1');
+    app.querySelector('#to')!.value = '2';
+    app.querySelector('#test-count')!.value = '2';
+    app.click('#start-test');
+    expect(app.innerHTML).toContain(promptMessage);
+    expect(app.innerHTML).not.toContain('offline');
+    expect(loads).toHaveLength(0);
+    available = true;
+    app.click('#prompt-retry');
+    await settle();
+    expect(loads).toHaveLength(1);
+    loads[0].resolve();
+    await settle();
+    expect(app.innerHTML).toContain('テスト 1問目');
+    expect(app.innerHTML).toContain('テスト 1 / 2問');
+    expect(app.innerHTML).not.toContain(promptMessage);
+  });
+
+  it('guards the practice mode selector and retries into test mode', async () => {
+    let available = false;
+    await restart({ prompts: () => available ? promptResponse() : Promise.reject(new Error('offline')) }, '?grade=e1&kanji=一');
+    loads[0].resolve();
+    await settle();
+    const select = app.querySelector('#mode')!;
+    select.value = 'test';
+    (select.onchange as (event: unknown) => void)({ target: select });
+    expect(select.value).toBe('free');
+    expect(app.innerHTML).toContain(promptMessage);
+    expect(app.innerHTML).not.toContain('もんだい');
+    available = true;
+    app.click('#prompt-retry');
+    await settle();
+    expect(app.innerHTML).toContain('もんだい');
+    expect(app.innerHTML).toContain('テストモード');
+  });
+
+  it('falls back to free practice for a test deep link and retries the same kanji', async () => {
+    let available = false;
+    await restart({ prompts: () => available ? promptResponse() : Promise.reject(new Error('offline')) }, '?grade=e1&kanji=二&mode=test');
+    loads[0].resolve();
+    await settle();
+    expect(app.querySelector('#mode')!.value).toBe('free');
+    expect(app.innerHTML).toContain(promptMessage);
+    available = true;
+    app.click('#prompt-retry');
+    await settle();
+    expect(fetch).toHaveBeenLastCalledWith('./data/kanji/04e8c.svg');
+    loads[1].resolve();
+    await settle();
+    expect(app.innerHTML).toContain('もんだい');
+  });
+
+  it('keeps a test deep link working when prompts are already available', async () => {
+    await restart({}, '?grade=e1&kanji=一&mode=test');
+    loads[0].resolve();
+    await settle();
+    expect(app.innerHTML).toContain('テストモード');
+    expect(app.innerHTML).not.toContain(promptMessage);
+  });
+
+  it('shows the deep-link notice on the landing list without a kanji parameter', async () => {
+    await restart({ prompts: () => Promise.reject(new Error('offline')) }, '?grade=e1&mode=test');
+    expect(app.innerHTML).toContain('練習する漢字を選んでください');
+    expect(app.innerHTML).toContain(promptMessage);
+    expect(app.querySelector('#prompt-retry')).not.toBeNull();
+  });
+
+  it('keeps the notice and allows another attempt when retry fails', async () => {
+    await restart({ prompts: () => Promise.reject(new Error('offline')) }, '?grade=e1');
+    app.querySelector('#to')!.value = '2';
+    app.querySelector('#test-count')!.value = '2';
+    app.click('#start-test');
+    app.click('#prompt-retry');
+    await settle();
+    expect(app.innerHTML).toContain(promptMessage);
+    expect(app.querySelector('#prompt-retry')!.disabled).toBe(false);
+    expect(loads).toHaveLength(0);
+  });
+
+  it.each(['404', 'bad JSON', 'empty data'])('treats prompt %s as unavailable without blocking startup', async failure => {
+    const json = vi.fn(() => { if (failure === 'bad JSON') throw new SyntaxError('bad JSON'); return {}; });
+    await restart({ prompts: () => Promise.resolve({ ok: failure !== '404', status: 404, json }) });
+    expect(app.innerHTML).toContain('学年を選んでください');
+    expect(console.error).toHaveBeenCalled();
+    if (failure === '404') expect(json).not.toHaveBeenCalled();
+    app.click('[data-grade="e1"]');
+    app.querySelector('#to')!.value = '2';
+    app.querySelector('#test-count')!.value = '2';
+    app.click('#start-test');
+    expect(app.innerHTML).toContain(promptMessage);
+    expect(loads).toHaveLength(0);
+  });
+
+  it('does not enter a test when a retry succeeds after navigating away', async () => {
+    let resolveRetry!: (response: unknown) => void;
+    let retry = false;
+    await restart({ prompts: () => retry ? new Promise(resolve => { resolveRetry = resolve; }) : Promise.reject(new Error('offline')) }, '?grade=e1');
+    app.querySelector('#to')!.value = '2';
+    app.querySelector('#test-count')!.value = '2';
+    app.click('#start-test');
+    retry = true;
+    app.click('#prompt-retry');
+    app.click('.back');
+    resolveRetry(await promptResponse());
+    await settle();
+    expect(app.innerHTML).toContain('学年を選んでください');
+    expect(loads).toHaveLength(0);
+  });
+
+  it('keeps the startup alert when metadata fails', async () => {
+    await restart({ meta: () => Promise.reject(new Error('meta offline')) });
+    expect(app.innerHTML).toBe('<p role="alert">データを読み込めませんでした。ページを再読み込みしてください。</p>');
+  });
+});
 
 describe('practice reference loading screens', () => {
   it('shows a reference error with retry and a working back-to-list button', async () => {
