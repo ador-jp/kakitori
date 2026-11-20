@@ -57,7 +57,7 @@ beforeEach(async () => {
   });
   vi.stubGlobal('DOMParser', class { parseFromString() { return { querySelectorAll: () => [] }; } });
   vi.stubGlobal('fetch', (url: string) => {
-    if (url.endsWith('meta.json')) return Promise.resolve({ json: () => ({ e1: ['一', '二'], joyo: ['一', '二'] }) });
+    if (url.endsWith('meta.json')) return Promise.resolve({ json: () => ({ e1: ['一', '二'], e2: [], e3: [], e4: [], e5: [], e6: [], j1: [], j2: [], j3: [], joyo: ['一', '二'] }) });
     if (url.endsWith('prompts.json')) return Promise.resolve({ json: () => ({ 一: { reading: 'いち', example: '一' }, 二: { reading: 'に', example: '二' } }) });
     return new Promise((resolve, reject) => loads.push({ resolve: () => resolve({ ok: true, text: () => '' }), reject }));
   });
@@ -76,6 +76,17 @@ async function startTest() {
 }
 
 describe('practice reference loading screens', () => {
+  it('disables empty-list tests and guards direct start calls without loading a reference', () => {
+    app.click('.back');
+    app.click('#weak');
+    expect(app.innerHTML).toContain('id="start-test" class="primary" disabled');
+    expect(app.innerHTML).toContain('テストに出題する漢字がありません。');
+    app.click('#start-test');
+    expect(app.querySelector('#test-error')!.textContent).toBe('テストに出題する漢字がありません。');
+    expect(loads).toHaveLength(0);
+    expect(app.innerHTML).not.toContain('1〜0');
+  });
+
   it.each(['resolve', 'reject'] as const)('keeps the test summary when a pending reference later %ss', async outcome => {
     await startTest();
     const next = app.querySelector('#next')!.onclick!;
