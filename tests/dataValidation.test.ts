@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const repo = fileURLToPath(new URL('../', import.meta.url));
 const current = JSON.parse(readFileSync(join(repo, 'public/data/meta.json'), 'utf8')) as Record<string, string[]>;
+const currentPrompts = JSON.parse(readFileSync(join(repo, 'public/data/prompts.json'), 'utf8')) as Record<string, { reading: string; example: string }>;
 const grades = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'j1', 'j2', 'j3', 'joyo'];
 let root: string;
 
@@ -18,10 +19,11 @@ beforeAll(() => {
 });
 afterAll(() => { if (root) rmSync(root, { recursive: true, force: true }); });
 
-function check(change: (meta: Record<string, unknown>) => void = () => {}) {
+function check(change: (meta: Record<string, unknown>) => void = () => {}, prompts: unknown = currentPrompts) {
   const meta = structuredClone(current);
   change(meta);
   writeFileSync(join(root, 'public/data/meta.json'), JSON.stringify(meta));
+  writeFileSync(join(root, 'public/data/prompts.json'), JSON.stringify(prompts));
   const result = spawnSync(process.execPath, [join(root, 'scripts/build-data.mjs'), '--check'], { encoding: 'utf8' });
   expect(result.error).toBeUndefined();
   expect(result.stderr).toBe('');
@@ -30,6 +32,42 @@ function check(change: (meta: Record<string, unknown>) => void = () => {}) {
 }
 
 describe('data validation CLI', () => {
+  it.each([
+    { name: 'array reading', entry: { ...currentPrompts.一, reading: [] } },
+    { name: 'numeric reading', entry: { ...currentPrompts.一, reading: 1 } },
+    { name: 'numeric example', entry: { ...currentPrompts.一, example: 1 } },
+    { name: 'array example', entry: { ...currentPrompts.一, example: ['一'] } },
+    { name: 'null entry', entry: null },
+    { name: 'number entry', entry: 1 },
+    { name: 'string entry', entry: '一' },
+    { name: 'array entry', entry: [] },
+    { name: 'missing fields', entry: {} },
+    { name: 'empty reading', entry: { ...currentPrompts.一, reading: '' } },
+    { name: 'example without the kanji', entry: { ...currentPrompts.一, example: '例文' } }
+  ])('rejects invalid prompt data: $name', ({ entry }) => {
+    const { status, report } = check(undefined, { ...currentPrompts, 一: entry });
+    expect(status).toBe(1);
+    expect(report.issues).toEqual(['問題データ不正: 一']);
+  });
+
+  it.each([null, [], 1, true, 'text', {}])('rejects invalid prompts root: %j', prompts => {
+    const { status, report } = check(undefined, prompts);
+    expect(status).toBe(1);
+    expect(report.issues).toEqual(['問題データ不正: prompts.json は空でないオブジェクトが必要です']);
+  });
+
+  it('validates extra entries that the runtime also checks', () => {
+    const { status, report } = check(undefined, { ...currentPrompts, extra: { reading: [], example: '例文' } });
+    expect(status).toBe(1);
+    expect(report.issues).toEqual(['問題データ不正: extra']);
+  });
+
+  it('accepts an extra entry with string fields as the runtime does', () => {
+    const { status, report } = check(undefined, { ...currentPrompts, extra: { reading: '', example: '' } });
+    expect(status).toBe(0);
+    expect(report.issues).toEqual([]);
+  });
+
   it.each([
     { name: 'empty d', path: '<path d=""/>', valid: false },
     { name: 'missing d', path: '<path/>', valid: false },

@@ -15,11 +15,21 @@ const root = path.resolve(import.meta.dirname, '..');
 if (process.argv.includes('--check')) {
   const data = JSON.parse(fs.readFileSync(path.join(root, 'public/data/meta.json'), 'utf8'));
   const meta = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
-  const prompts = JSON.parse(fs.readFileSync(path.join(root, 'public/data/prompts.json'), 'utf8'));
+  const promptData = JSON.parse(fs.readFileSync(path.join(root, 'public/data/prompts.json'), 'utf8'));
+  const validPromptRoot = promptData && typeof promptData === 'object' && !Array.isArray(promptData) && Object.keys(promptData).length > 0;
+  const prompts = validPromptRoot ? promptData : {};
   const expected = { e1: 80, e2: 160, e3: 200, e4: 202, e5: 193, e6: 191, j1: 370, j2: 370, j3: 370, joyo: 2136 };
   const issues = [];
   const joyo = Array.isArray(meta.joyo) ? meta.joyo : [];
   const joyoSet = new Set(joyo);
+  const invalidPromptKeys = new Set();
+  if (!validPromptRoot) issues.push('問題データ不正: prompts.json は空でないオブジェクトが必要です');
+  for (const [char, prompt] of Object.entries(prompts)) {
+    if (!prompt || typeof prompt.reading !== 'string' || typeof prompt.example !== 'string') {
+      invalidPromptKeys.add(char);
+      issues.push(`問題データ不正: ${char}`);
+    }
+  }
   const assigned = new Map();
   for (const [grade, count] of Object.entries(expected)) {
     if (!Object.hasOwn(meta, grade)) { issues.push(`${grade}: キーがありません`); continue; }
@@ -38,7 +48,7 @@ if (process.argv.includes('--check')) {
   for (const char of joyo) {
     if (typeof char !== 'string' || [...char].length !== 1) continue;
     if (!assigned.has(char)) issues.push(`学年未配当: ${char}`);
-    if (!prompts[char]?.reading || !prompts[char]?.example?.includes(char)) issues.push(`問題データ不正: ${char}`);
+    if (validPromptRoot && !invalidPromptKeys.has(char) && (!prompts[char]?.reading || !prompts[char]?.example?.includes(char))) issues.push(`問題データ不正: ${char}`);
     const file = path.join(root, 'public/data/kanji', `${char.codePointAt(0).toString(16).padStart(5, '0')}.svg`);
     if (!fs.existsSync(file) || !hasStrokePath(fs.readFileSync(file, 'utf8'))) issues.push(`筆順データ不正: ${char}`);
   }
