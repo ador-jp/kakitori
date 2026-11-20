@@ -30,6 +30,32 @@ function check(change: (meta: Record<string, unknown>) => void = () => {}) {
 }
 
 describe('data validation CLI', () => {
+  it.each([
+    { missing: ['j1', 'j2', 'j3', 'e1', 'e2', 'e3', 'e4', 'e5'] },
+    { missing: ['joyo'] }
+  ])('writes a complete report through a real pipe when keys are missing: $missing', ({ missing }) => {
+    const meta = structuredClone(current);
+    for (const grade of missing) delete meta[grade];
+    writeFileSync(join(root, 'public/data/meta.json'), JSON.stringify(meta));
+    const parser = `
+      setTimeout(() => {
+        const text = require('node:fs').readFileSync(0, 'utf8');
+        process.stdout.write(JSON.stringify(JSON.parse(text)));
+      }, 100);
+    `;
+    const result = spawnSync('sh', ['-c',
+      '( "$1" "$2" --check; printf "producer-exit:%s\\n" "$?" >&2 ) | "$1" -e "$3"',
+      'validation-pipe', process.execPath, join(root, 'scripts/build-data.mjs'), parser
+    ], { encoding: 'utf8' });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('producer-exit:1\n');
+    const reportText = readFileSync(join(root, 'validation-report.json'), 'utf8');
+    expect(Buffer.byteLength(reportText)).toBeGreaterThan(50_000);
+    expect(JSON.parse(result.stdout)).toEqual(JSON.parse(reportText));
+    expect(JSON.parse(result.stdout).issues.length).toBeGreaterThan(1900);
+  });
+
   it('accepts current data', () => {
     const { status, report } = check();
     expect(status).toBe(0);

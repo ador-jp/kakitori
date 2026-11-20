@@ -33,7 +33,9 @@ if (process.argv.includes('--check')) {
   }
   const report = { checkedAt: new Date().toISOString(), joyo: joyo.length, elementary: ['e1','e2','e3','e4','e5','e6'].reduce((n, g) => n + (Array.isArray(meta[g]) ? meta[g].length : 0), 0), issues };
   fs.writeFileSync(path.join(root, 'validation-report.json'), JSON.stringify(report, null, 2) + '\n');
-  console.log(JSON.stringify(report, null, 2));
+  await new Promise((resolve, reject) => {
+    process.stdout.write(JSON.stringify(report, null, 2) + '\n', error => error ? reject(error) : resolve());
+  });
   if (issues.length) process.exitCode = 1;
   process.exit();
 }
