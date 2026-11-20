@@ -66,7 +66,8 @@ function list(title: string, chars: string[]) {
 }
 
 function referenceError(error: unknown) {
-  app.innerHTML = `<header class="compact"><button class="back">← 漢字一覧</button><h1>お手本を読み込めませんでした</h1></header><main><p role="alert">${escapeHtml((error as Error).message)}</p><div class="actions"><button id="retry" class="primary">もう一度</button></div></main>`;
+  console.error(error);
+  app.innerHTML = `<header class="compact"><button class="back">← 漢字一覧</button><h1>お手本を読み込めませんでした</h1></header><main><p role="alert">通信状態を確認して、もう一度お試しください。</p><div class="actions"><button id="retry" class="primary">もう一度</button></div></main>`;
   app.querySelector<HTMLButtonElement>('.back')!.onclick = () => choose(grade);
   app.querySelector<HTMLButtonElement>('#retry')!.onclick = () => practice(selected);
 }

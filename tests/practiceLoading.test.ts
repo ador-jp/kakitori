@@ -44,6 +44,7 @@ const settle = () => vi.dynamicImportSettled();
 beforeEach(async () => {
   vi.resetModules();
   vi.clearAllMocks();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
   app = new Screen(); loads = []; frames = [];
   vi.stubGlobal('location', { search: '?grade=e1', protocol: 'file:' });
   vi.stubGlobal('navigator', {});
@@ -65,7 +66,7 @@ beforeEach(async () => {
   await settle();
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 async function startTest() {
   app.querySelector('#to')!.value = '2';
@@ -79,9 +80,12 @@ describe('practice reference loading screens', () => {
   it('shows a reference error with retry and a working back-to-list button', async () => {
     await startTest();
     app.click('#next');
-    loads[1].reject(new Error('お手本を読み込めませんでした'));
+    const error = new Error('Failed to fetch');
+    loads[1].reject(error);
     await settle();
-    expect(app.innerHTML).toContain('<p role="alert">お手本を読み込めませんでした</p>');
+    expect(app.innerHTML).toContain('<p role="alert">通信状態を確認して、もう一度お試しください。</p>');
+    expect(app.innerHTML).not.toContain(error.message);
+    expect(console.error).toHaveBeenCalledExactlyOnceWith(error);
     expect(app.innerHTML).toContain('もう一度</button>');
     expect(app.innerHTML).toContain('← 漢字一覧</button>');
     expect(app.querySelector('#retry')).not.toBeNull();
