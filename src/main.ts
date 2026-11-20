@@ -7,6 +7,7 @@ import { modeForKanjiSelection, randomItem, selectRandom } from './selection';
 import { loadSlowDemo, saveSlowDemo } from './preferences';
 import { createLatestLoad } from './latestLoad';
 import { createPointerStroke } from './pointerStroke';
+import { emptyRangeMessage, rangeTestError } from './rangeTest';
 
 type Meta = Record<string, string[]>;
 type Prompts = Record<string, { reading: string; example: string }>;
@@ -49,7 +50,7 @@ function home() {
 function choose(key: string) { grade = key; testQueue = []; setQuery({ grade }); list(labels[key], meta[key]); }
 function list(title: string, chars: string[]) {
   referenceLoad.invalidate();
-  app.innerHTML = `<header class="compact"><button class="back" aria-label="ホームへ戻る">← ホーム</button><h1>${title}</h1></header><main><section><h2>練習する漢字を選んでください</h2>${grade.startsWith('j') ? '<p class="notice">中学校には公式の学年別配当がないため、常用漢字の学習用参考区分です。</p>' : ''}<div class="filters"><label>漢字を検索 <input id="search" maxlength="1" inputmode="text" placeholder="例：海"></label><label>番号 <input id="from" type="number" min="1" value="1"> 〜 <input id="to" type="number" min="1" value="${Math.min(25, chars.length)}"></label><button id="range">しぼりこむ</button><button id="random" ${chars.length ? '' : 'disabled'}>ランダム練習</button></div><div class="test-maker"><h3>範囲からテストを作る</h3><label>出題数 <input id="test-count" type="number" min="1" value="5"> 問</label><button id="start-test" class="primary">この範囲からテスト</button><p id="test-error" role="alert"></p></div><p id="count">${chars.length}字</p>${chars.length ? '' : '<p class="hint">練習する漢字はまだありません。</p>'}<div class="kanji-grid">${chars.map((k, i) => `<button data-kanji="${k}" aria-label="${k}を練習"><span>${k}</span><small>${i + 1}</small></button>`).join('')}</div></section></main>`;
+  app.innerHTML = `<header class="compact"><button class="back" aria-label="ホームへ戻る">← ホーム</button><h1>${title}</h1></header><main><section><h2>練習する漢字を選んでください</h2>${grade.startsWith('j') ? '<p class="notice">中学校には公式の学年別配当がないため、常用漢字の学習用参考区分です。</p>' : ''}<div class="filters"><label>漢字を検索 <input id="search" maxlength="1" inputmode="text" placeholder="例：海"></label><label>番号 <input id="from" type="number" min="1" value="1"> 〜 <input id="to" type="number" min="1" value="${Math.min(25, chars.length)}"></label><button id="range">しぼりこむ</button><button id="random" ${chars.length ? '' : 'disabled'}>ランダム練習</button></div><div class="test-maker"><h3>範囲からテストを作る</h3><label>出題数 <input id="test-count" type="number" min="1" value="5"> 問</label><button id="start-test" class="primary" ${chars.length ? '' : 'disabled'}>この範囲からテスト</button><p id="test-error" role="alert">${chars.length ? '' : emptyRangeMessage}</p></div><p id="count">${chars.length}字</p>${chars.length ? '' : '<p class="hint">練習する漢字はまだありません。</p>'}<div class="kanji-grid">${chars.map((k, i) => `<button data-kanji="${k}" aria-label="${k}を練習"><span>${k}</span><small>${i + 1}</small></button>`).join('')}</div></section></main>`;
   app.querySelector<HTMLButtonElement>('.back')!.onclick = home;
   const buttons = [...app.querySelectorAll<HTMLButtonElement>('[data-kanji]')];
   buttons.forEach(b => b.onclick = () => { testQueue = []; mode = modeForKanjiSelection(mode); practice(b.dataset.kanji!); });
@@ -58,8 +59,8 @@ function list(title: string, chars: string[]) {
   app.querySelector<HTMLButtonElement>('#random')!.onclick = () => { const char = randomItem(chars); if (char === undefined) return; testQueue = []; mode = modeForKanjiSelection(mode); practice(char); };
   app.querySelector<HTMLButtonElement>('#start-test')!.onclick = () => {
     const from = Number((app.querySelector('#from') as HTMLInputElement).value), to = Number((app.querySelector('#to') as HTMLInputElement).value), count = Number((app.querySelector('#test-count') as HTMLInputElement).value), error = app.querySelector<HTMLElement>('#test-error')!;
-    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to > chars.length || from > to) { error.textContent = `番号は1〜${chars.length}の範囲で、最初の番号を小さくしてください。`; return; }
-    if (!Number.isInteger(count) || count < 1 || count > to - from + 1) { error.textContent = `出題数は1〜${to - from + 1}問にしてください。`; return; }
+    error.textContent = rangeTestError(chars.length, from, to, count);
+    if (error.textContent) return;
     testQueue = selectRandom(chars, from, to, count); testScores = Array(count); testIndex = 0; mode = 'test'; practice(testQueue[0]);
   };
 }
