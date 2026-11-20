@@ -31,6 +31,28 @@ function check(change: (meta: Record<string, unknown>) => void = () => {}) {
 
 describe('data validation CLI', () => {
   it.each([
+    { name: 'empty d', path: '<path d=""/>', valid: false },
+    { name: 'missing d', path: '<path/>', valid: false },
+    { name: 'whitespace-only d', path: '<path d="  \n\t "/>', valid: false },
+    { name: 'non-move command', path: '<path d="L10,20"/>', valid: false },
+    { name: 'commented-out path', path: '<!-- <path d="M0,0 L10,20"/> -->', valid: false },
+    { name: 'unrelated attribute', path: '<path data-d="M0,0 L10,20"/>', valid: false },
+    { name: 'valid path without an id', path: '<path d="M0,0 L10,20"/>', valid: true },
+    { name: 'relative move with single quotes', path: "<g><path d='  m0,0 l10,20'/></g>", valid: true }
+  ])('validates SVG stroke data: $name', ({ path, valid }) => {
+    const file = join(root, 'public/data/kanji/04e00.svg');
+    const original = readFileSync(file, 'utf8');
+    try {
+      writeFileSync(file, `<svg xmlns="http://www.w3.org/2000/svg">${path}</svg>`);
+      const { status, report } = check();
+      expect(status).toBe(valid ? 0 : 1);
+      expect(report.issues).toEqual(valid ? [] : ['筆順データ不正: 一']);
+    } finally {
+      writeFileSync(file, original);
+    }
+  });
+
+  it.each([
     { missing: ['j1', 'j2', 'j3', 'e1', 'e2', 'e3', 'e4', 'e5'] },
     { missing: ['joyo'] }
   ])('writes a complete report through a real pipe when keys are missing: $missing', ({ missing }) => {
