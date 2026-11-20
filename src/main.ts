@@ -16,7 +16,7 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
 let meta: Meta, prompts: Prompts, grade = 'e1', selected = '', mode = 'free', strokes: Stroke[] = [], reference: Stroke[] = [], showModel = true, debug = new URLSearchParams(location.search).has('debug');
 let testQueue: string[] = [], testIndex = 0, testScores: Array<number | undefined> = [];
 let slowDemo = loadSlowDemo();
-const referenceLoad = createLatestLoad(loadReference, value => { reference = value; renderPractice(); }, error => { app.innerHTML = `<p role="alert">${(error as Error).message}</p>`; });
+const referenceLoad = createLatestLoad(loadReference, value => { reference = value; renderPractice(); }, referenceError);
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) registerSW({ immediate: true });
 
@@ -63,6 +63,12 @@ function list(title: string, chars: string[]) {
     if (error.textContent) return;
     testQueue = selectRandom(chars, from, to, count); testScores = Array(count); testIndex = 0; mode = 'test'; practice(testQueue[0]);
   };
+}
+
+function referenceError(error: unknown) {
+  app.innerHTML = `<header class="compact"><button class="back">← 漢字一覧</button><h1>お手本を読み込めませんでした</h1></header><main><p role="alert">${escapeHtml((error as Error).message)}</p><div class="actions"><button id="retry" class="primary">もう一度</button></div></main>`;
+  app.querySelector<HTMLButtonElement>('.back')!.onclick = () => choose(grade);
+  app.querySelector<HTMLButtonElement>('#retry')!.onclick = () => practice(selected);
 }
 
 async function practice(char: string) {
