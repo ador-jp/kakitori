@@ -115,7 +115,7 @@ function drawStroke() {
   (board.onpointerdown as (event: unknown) => void)(event);
   board = app.querySelector('#board')!;
   (board.onpointermove as (event: unknown) => void)({ ...event, clientX: 80 });
-  (board.onpointerup as (event: unknown) => void)(event);
+  (board.onpointerup as (event: unknown) => void)({ ...event, clientX: 80 });
 }
 
 function judge() {
@@ -195,6 +195,54 @@ describe('combined list filters', () => {
   });
 });
 
+describe('pointer release coordinates', () => {
+  beforeEach(async () => {
+    app.click('[data-kanji="一"]'); loads[0].resolve(); await settle();
+  });
+  const pointer = { pointerId: 1, isPrimary: true, clientX: 10, clientY: 50, preventDefault() {} };
+  const send = (handler: string, event = pointer) => {
+    (app.querySelector('#board')![handler] as (event: unknown) => void)(event);
+  };
+
+  it('includes the release point after the last delivered move', () => {
+    send('onpointerdown');
+    send('onpointermove', { ...pointer, clientX: 60 });
+    send('onpointerup', { ...pointer, clientX: 90 });
+    judge();
+    expect(vi.mocked(evaluate).mock.calls.at(-1)![0]).toEqual([
+      [{ x: 0.1, y: 0.5 }, { x: 0.6, y: 0.5 }, { x: 0.9, y: 0.5 }]
+    ]);
+  });
+
+  it.each([60, 60.1])('suppresses duplicate and tiny release movement at %s', clientX => {
+    send('onpointerdown');
+    send('onpointermove', { ...pointer, clientX: 60 });
+    send('onpointerup', { ...pointer, clientX });
+    judge();
+    expect(vi.mocked(evaluate).mock.calls.at(-1)![0][0]).toEqual([{ x: 0.1, y: 0.5 }, { x: 0.6, y: 0.5 }]);
+  });
+
+  it.each([{ pointerId: 2, isPrimary: true }, { pointerId: 1, isPrimary: false }])('ignores foreign or non-primary release $pointerId/$isPrimary', other => {
+    send('onpointerdown');
+    send('onpointerup', { ...pointer, ...other, clientX: 90 });
+    send('onpointermove', { ...pointer, clientX: 60 });
+    send('onpointerup', { ...pointer, clientX: 80 });
+    judge();
+    expect(vi.mocked(evaluate).mock.calls.at(-1)![0][0]).toEqual([
+      { x: 0.1, y: 0.5 }, { x: 0.6, y: 0.5 }, { x: 0.8, y: 0.5 }
+    ]);
+  });
+
+  it.each(['onpointercancel', 'onlostpointercapture'])('still discards on %s and ignores a later release', handler => {
+    send('onpointerdown');
+    send('onpointermove', { ...pointer, clientX: 60 });
+    send(handler);
+    send('onpointerup', { ...pointer, clientX: 90 });
+    judge();
+    expect(vi.mocked(evaluate).mock.calls.at(-1)![0]).toEqual([]);
+  });
+});
+
 describe('per-stroke hints', () => {
   it('logs evaluation errors without throwing or changing the hint', async () => {
     vi.stubGlobal('DOMParser', class { parseFromString() { return { querySelectorAll: () => [{ getAttribute: () => '' }] }; } });
@@ -265,7 +313,7 @@ describe('new answers after judging', () => {
     expect(remove).toHaveBeenCalled();
     (board.onpointermove as (event: unknown) => void)({ ...event, clientX: 80 });
     expect(app.querySelector('#board')).toBe(board);
-    (board.onpointerup as (event: unknown) => void)(event);
+    (board.onpointerup as (event: unknown) => void)({ ...event, clientX: 80 });
     expectUnanswered();
     judge();
     judge();
