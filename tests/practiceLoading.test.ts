@@ -44,6 +44,7 @@ const settle = () => vi.dynamicImportSettled();
 beforeEach(async () => {
   vi.resetModules();
   vi.clearAllMocks();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
   app = new Screen(); loads = []; frames = [];
   vi.stubGlobal('location', { search: '?grade=e1', protocol: 'file:' });
   vi.stubGlobal('navigator', {});
@@ -51,31 +52,74 @@ beforeEach(async () => {
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.push(callback); });
   vi.stubGlobal('document', {
     querySelector: () => app,
-    createElement: () => ({ textContent: '', innerHTML: '' }),
+    createElement: () => ({ textContent: '', get innerHTML() { return this.textContent.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'); } }),
     createElementNS: () => ({ style: {}, append() {}, remove() {} }),
     body: { append() {} }
   });
   vi.stubGlobal('DOMParser', class { parseFromString() { return { querySelectorAll: () => [] }; } });
-  vi.stubGlobal('fetch', (url: string) => {
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
     if (url.endsWith('meta.json')) return Promise.resolve({ json: () => ({ e1: ['一', '二'], e2: [], e3: [], e4: [], e5: [], e6: [], j1: [], j2: [], j3: [], joyo: ['一', '二'] }) });
     if (url.endsWith('prompts.json')) return Promise.resolve({ json: () => ({ 一: { reading: 'いち', example: '一' }, 二: { reading: 'に', example: '二' } }) });
     return new Promise((resolve, reject) => loads.push({ resolve: () => resolve({ ok: true, text: () => '' }), reject }));
-  });
+  }));
   await import('../src/main');
   await settle();
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 async function startTest() {
   app.querySelector('#to')!.value = '2';
   app.querySelector('#test-count')!.value = '2';
   app.click('#start-test');
-  loads[0].resolve();
+  loads.at(-1)!.resolve();
   await settle();
 }
 
 describe('practice reference loading screens', () => {
+  it('shows a reference error with retry and a working back-to-list button', async () => {
+    await startTest();
+    app.click('#next');
+    const error = new Error('Failed to fetch');
+    loads[1].reject(error);
+    await settle();
+    expect(app.innerHTML).toContain('<p role="alert">通信状態を確認して、もう一度お試しください。</p>');
+    expect(app.innerHTML).not.toContain(error.message);
+    expect(console.error).toHaveBeenCalledExactlyOnceWith(error);
+    expect(app.innerHTML).toContain('もう一度</button>');
+    expect(app.innerHTML).toContain('← 漢字一覧</button>');
+    expect(app.querySelector('#retry')).not.toBeNull();
+    app.click('.back');
+    expect(app.innerHTML).toContain('練習する漢字を選んでください');
+  });
+
+  it('retries the same kanji and restores practice without advancing the test', async () => {
+    await startTest();
+    app.click('#next');
+    loads[1].reject(new Error('offline'));
+    await settle();
+    app.click('#retry');
+    expect(fetch).toHaveBeenLastCalledWith('./data/kanji/04e8c.svg');
+    expect(app.innerHTML).toContain('お手本を読み込んでいます');
+    loads[2].resolve();
+    await settle();
+    expect(app.innerHTML).toContain('テスト 2問目');
+    expect(app.querySelector('#judge')).not.toBeNull();
+  });
+
+  it('ignores a stale failure after a different kanji has loaded', async () => {
+    await startTest();
+    app.click('#next');
+    app.click('.back');
+    await startTest();
+    const current = app.innerHTML;
+    loads[1].reject(new Error('late failure'));
+    await settle();
+    expect(app.innerHTML).toBe(current);
+    expect(app.innerHTML).not.toContain('role="alert"');
+    expect(app.querySelector('#retry')).toBeNull();
+  });
+
   it('disables empty-list tests and guards direct start calls without loading a reference', () => {
     app.click('.back');
     app.click('#weak');
