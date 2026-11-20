@@ -106,6 +106,53 @@ const promptMessage = 'テスト問題を読み込めませんでした。通信
 const promptResponse = () => Promise.resolve({ ok: true, json: () => ({ 一: { reading: 'いち', example: '一' }, 二: { reading: 'に', example: '二' } }) });
 
 describe('independent prompt loading', () => {
+  it('waits for pending prompts before entering a test deep link', async () => {
+    let resolvePrompts!: (response: unknown) => void;
+    await restart({ prompts: () => new Promise(resolve => { resolvePrompts = resolve; }) }, '?grade=e1&kanji=一&mode=test');
+    expect(loads).toHaveLength(0);
+    expect(app.innerHTML).not.toContain(promptMessage);
+    resolvePrompts(await promptResponse());
+    await settle();
+    expect(loads).toHaveLength(1);
+    loads[0].resolve();
+    await settle();
+    expect(app.innerHTML).toContain('テストモード');
+    expect(app.innerHTML).not.toContain(promptMessage);
+  });
+
+  it('waits for pending prompts when a range test is requested', async () => {
+    let resolvePrompts!: (response: unknown) => void;
+    await restart({ prompts: () => new Promise(resolve => { resolvePrompts = resolve; }) }, '?grade=e1');
+    app.querySelector('#to')!.value = '2';
+    app.querySelector('#test-count')!.value = '2';
+    app.click('#start-test');
+    await settle();
+    expect(loads).toHaveLength(0);
+    expect(app.innerHTML).not.toContain(promptMessage);
+    resolvePrompts(await promptResponse());
+    await settle();
+    expect(loads).toHaveLength(1);
+    loads[0].resolve();
+    await settle();
+    expect(app.innerHTML).toContain('テスト 1問目');
+    expect(app.innerHTML).not.toContain(promptMessage);
+  });
+
+  it.each(['success', 'failure'])('ignores a pending test entry after navigation on prompt %s', async outcome => {
+    let resolvePrompts!: (response: unknown) => void, rejectPrompts!: (error: Error) => void;
+    await restart({ prompts: () => new Promise((resolve, reject) => { resolvePrompts = resolve; rejectPrompts = reject; }) }, '?grade=e1');
+    app.querySelector('#to')!.value = '2';
+    app.querySelector('#test-count')!.value = '2';
+    app.click('#start-test');
+    app.click('.back');
+    if (outcome === 'success') resolvePrompts(await promptResponse());
+    else rejectPrompts(new Error('offline'));
+    await settle();
+    expect(app.innerHTML).toContain('学年を選んでください');
+    expect(app.innerHTML).not.toContain(promptMessage);
+    expect(loads).toHaveLength(0);
+  });
+
   it('renders home before prompts settle and allows free and order practice after a prompt failure', async () => {
     let rejectPrompts!: (error: Error) => void;
     await restart({ prompts: () => new Promise((_resolve, reject) => { rejectPrompts = reject; }) });
@@ -134,6 +181,7 @@ describe('independent prompt loading', () => {
     app.querySelector('#to')!.value = '2';
     app.querySelector('#test-count')!.value = '2';
     app.click('#start-test');
+    await settle();
     expect(app.innerHTML).toContain(promptMessage);
     expect(app.innerHTML).not.toContain('offline');
     expect(loads).toHaveLength(0);
@@ -156,6 +204,7 @@ describe('independent prompt loading', () => {
     const select = app.querySelector('#mode')!;
     select.value = 'test';
     (select.onchange as (event: unknown) => void)({ target: select });
+    await settle();
     expect(select.value).toBe('free');
     expect(app.innerHTML).toContain(promptMessage);
     expect(app.innerHTML).not.toContain('もんだい');
@@ -202,6 +251,7 @@ describe('independent prompt loading', () => {
     app.querySelector('#to')!.value = '2';
     app.querySelector('#test-count')!.value = '2';
     app.click('#start-test');
+    await settle();
     app.click('#prompt-retry');
     await settle();
     expect(app.innerHTML).toContain(promptMessage);
@@ -219,6 +269,7 @@ describe('independent prompt loading', () => {
     app.querySelector('#to')!.value = '2';
     app.querySelector('#test-count')!.value = '2';
     app.click('#start-test');
+    await settle();
     expect(app.innerHTML).toContain(promptMessage);
     expect(loads).toHaveLength(0);
   });
@@ -230,6 +281,7 @@ describe('independent prompt loading', () => {
     app.querySelector('#to')!.value = '2';
     app.querySelector('#test-count')!.value = '2';
     app.click('#start-test');
+    await settle();
     retry = true;
     app.click('#prompt-retry');
     app.click('.back');

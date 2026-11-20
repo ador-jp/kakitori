@@ -41,14 +41,18 @@ function promptNotice(continueTest: () => void) {
   const button = app.querySelector<HTMLButtonElement>('#prompt-retry')!;
   button.onclick = async () => {
     button.disabled = true;
-    const loaded = await loadPrompts();
+    promptsReady = loadPrompts();
+    const loaded = await promptsReady;
     if (app.querySelector('#prompt-retry') !== button) return;
     button.disabled = false;
     if (loaded) { app.querySelector('#prompt-notice')!.remove(); continueTest(); }
   };
 }
 
-function enterTest(continueTest: () => void) {
+async function enterTest(continueTest: () => void) {
+  const screen = app.querySelector('main');
+  if (!prompts) await promptsReady;
+  if (app.querySelector('main') !== screen) return;
   if (prompts) continueTest();
   else promptNotice(continueTest);
 }
@@ -155,13 +159,13 @@ function next() { if (testQueue.length) { if (++testIndex >= testQueue.length) s
 function showTestSummary() { referenceLoad.invalidate(); const answered = testScores.filter((score): score is number => score !== undefined), average = answered.length ? Math.round(answered.reduce((a, b) => a + b, 0) / answered.length) : 0; app.innerHTML = `<header class="compact"><button class="back">← 漢字一覧</button><h1>テスト結果</h1></header><main><section class="test-summary"><h2>平均 ${average}点</h2><p>${answered.length} / ${testQueue.length}問を判定しました</p><div class="test-results">${testQueue.map((char, i) => `<span><b>${char}</b>${testScores[i] === undefined ? '未判定' : `${testScores[i]}点`}</span>`).join('')}</div><div class="actions"><button id="retry">同じ漢字でもう一度</button><button id="finish" class="primary">漢字一覧へ</button></div></section></main>`; app.querySelector<HTMLButtonElement>('.back')!.onclick = () => choose(grade); app.querySelector<HTMLButtonElement>('#finish')!.onclick = () => choose(grade); app.querySelector<HTMLButtonElement>('#retry')!.onclick = () => enterTest(() => { testScores = Array(testQueue.length); testIndex = 0; mode = 'test'; practice(testQueue[0]); }); }
 function progressView() { referenceLoad.invalidate(); const rows = Object.entries(loadProgress()); app.innerHTML = `<header class="compact"><button class="back">← ホーム</button><h1>これまでの練習</h1></header><main><table><thead><tr><th>漢字</th><th>練習回数</th><th>最新</th><th>最高点</th></tr></thead><tbody>${rows.map(([k, p]) => `<tr><th>${k}</th><td>${p.attempts}回</td><td>${p.latest}点</td><td>${p.best}点</td></tr>`).join('') || '<tr><td colspan="4">まだ記録がありません</td></tr>'}</tbody></table><button id="erase" class="danger">学習記録を消す</button></main>`; app.querySelector<HTMLButtonElement>('.back')!.onclick = home; app.querySelector<HTMLButtonElement>('#erase')!.onclick = () => { if (confirm('この端末の学習記録をすべて消しますか？')) { clearProgress(); progressView(); } }; }
 
-void loadPrompts();
+let promptsReady = loadPrompts();
 fetch('./data/meta.json').then(r => { if (!r.ok) throw new Error('meta.json'); return r.json(); }).then(async (data: Meta) => {
   meta = data;
   const q = new URLSearchParams(location.search);
   grade = meta[q.get('grade') || ''] ? q.get('grade')! : 'e1';
   mode = ['free', 'order', 'test'].includes(q.get('mode') || '') ? q.get('mode')! : 'free';
-  const needsPrompts = mode === 'test' && !prompts;
+  const needsPrompts = mode === 'test' && !(await promptsReady);
   if (needsPrompts) mode = 'free';
   const char = q.get('kanji'), practiceChar = char && meta.joyo.includes(char) ? char : undefined;
   if (practiceChar) await practice(practiceChar);
