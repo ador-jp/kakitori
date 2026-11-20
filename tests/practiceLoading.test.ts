@@ -176,25 +176,45 @@ describe('new answers after judging', () => {
     expect(app.innerHTML).toContain('<b>一</b>85点');
   });
 
-  it('starts an unanswered attempt on pointerdown without losing the new stroke', async () => {
+  it('keeps the board stationary and preserves pointer coordinates until pointerup', async () => {
     await startTest();
     drawStroke();
     judge();
     const board = app.querySelector('#board')!;
-    const event = { pointerId: 1, isPrimary: true, clientX: 10, clientY: 20, preventDefault() {} };
+    board.getBoundingClientRect = () => ({ left: 0, top: 100, width: 100, height: 100 });
+    const remove = vi.fn();
+    board.querySelectorAll = vi.fn(() => [{ remove }]);
+    const event = { pointerId: 1, isPrimary: true, clientX: 10, clientY: 120, preventDefault() {} };
     (board.onpointerdown as (event: unknown) => void)({ ...event, isPrimary: false });
     expect(app.querySelector('.result')).not.toBeNull();
     (board.onpointerdown as (event: unknown) => void)(event);
+    expect(app.querySelector('#board')).toBe(board);
+    expect(app.querySelector('.result')).not.toBeNull();
+    expect(board.querySelectorAll).toHaveBeenCalledWith('.ref,.number,.correction,.success-circle,.success-mark');
+    expect(remove).toHaveBeenCalled();
+    (board.onpointermove as (event: unknown) => void)({ ...event, clientX: 80 });
+    expect(app.querySelector('#board')).toBe(board);
+    (board.onpointerup as (event: unknown) => void)(event);
     expectUnanswered();
-    const freshBoard = app.querySelector('#board')!;
-    (freshBoard.onpointermove as (event: unknown) => void)({ ...event, clientX: 80 });
-    (freshBoard.onpointerup as (event: unknown) => void)(event);
     judge();
     judge();
     expect(saveResult).toHaveBeenCalledTimes(2);
     const strokes = vi.mocked(evaluate).mock.calls.at(-1)![0];
     expect(strokes).toHaveLength(2);
-    expect(strokes[1]).toHaveLength(2);
+    expect(strokes[1]).toEqual([{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.2 }]);
+  });
+
+  it.each(['onpointercancel', 'onlostpointercapture'])('returns to the unanswered screen after %s', async handler => {
+    await startTest();
+    drawStroke();
+    judge();
+    const board = app.querySelector('#board')!;
+    const event = { pointerId: 1, isPrimary: true, clientX: 10, clientY: 20, preventDefault() {} };
+    (board.onpointerdown as (event: unknown) => void)(event);
+    (board[handler] as (event: unknown) => void)(event);
+    expectUnanswered();
+    judge();
+    expect(vi.mocked(evaluate).mock.calls.at(-1)![0]).toHaveLength(1);
   });
 
   it.each(['free', 'order'])('keeps the model visible after clearing in %s mode', async mode => {
