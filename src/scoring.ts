@@ -21,9 +21,11 @@ export function resample(points: Stroke, count: number = TOLERANCE.samplePoints)
   const total = lengths.at(-1)!;
   if (!total) return Array(count).fill(points[0]);
   return Array.from({ length: count }, (_, i) => {
+    if (i === 0) return points[0];
+    if (i === count - 1) return points.at(-1)!;
     const target = total * i / (count - 1);
     let j = 1;
-    while (lengths[j] < target) j++;
+    while (j < points.length - 1 && lengths[j] < target) j++;
     const ratio = (target - lengths[j - 1]) / (lengths[j] - lengths[j - 1]);
     return { x: points[j - 1].x + (points[j].x - points[j - 1].x) * ratio, y: points[j - 1].y + (points[j].y - points[j - 1].y) * ratio };
   });

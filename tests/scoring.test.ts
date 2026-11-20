@@ -4,6 +4,46 @@ import { correctionStrokeIndices, directionScore, evaluate, isScored, normalize,
 const horizontal: Stroke = [{ x: 10, y: 20 }, { x: 50, y: 20 }, { x: 90, y: 20 }];
 const vertical: Stroke = [{ x: 50, y: 10 }, { x: 50, y: 90 }];
 
+describe('resample endpoint regression', () => {
+  const diagonal: Stroke = [{ x: 0, y: 0 }, { x: 0.8, y: 0.076 }];
+  const checkSamples = (stroke: Stroke) => {
+    const samples = resample(stroke);
+    expect(samples).toHaveLength(32);
+    expect(samples[0]).toEqual(stroke[0]);
+    expect(samples.at(-1)).toEqual(stroke.at(-1));
+    expect(samples.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))).toBe(true);
+  };
+
+  it('preserves exact endpoints for the rounding-overflow stroke', () => checkSamples(diagonal));
+  it('scores the rounding-overflow stroke', () => {
+    const result = evaluate([diagonal], [horizontal]);
+    expect(isScored(result)).toBe(true);
+    expect(Number.isFinite(result.total)).toBe(true);
+  });
+  it('handles a deterministic fuzz of two-point and multi-point strokes', () => {
+    let seed = 42;
+    const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; };
+    for (let i = 0; i < 500; i++) {
+      const stroke = Array.from({ length: i % 2 ? 2 : 3 + i % 20 }, () => ({ x: random(), y: random() }));
+      checkSamples(stroke);
+      expect(isScored(evaluate([stroke], [horizontal]))).toBe(true);
+    }
+  });
+  it('keeps ordinary horizontal samples unchanged', () => {
+    const samples = resample(horizontal);
+    samples.forEach((p, i) => {
+      expect(p.x).toBeCloseTo(10 + 80 * i / 31, 12);
+      expect(p.y).toBe(20);
+    });
+  });
+  it('keeps empty, single-point and zero-length input behavior', () => {
+    expect(resample([])).toEqual([]);
+    const point = { x: 0.2, y: 0.3 };
+    expect(resample([point])).toEqual(Array(32).fill(point));
+    expect(resample([point, point])).toEqual(Array(32).fill(point));
+  });
+});
+
 describe('修正するお手本の筆画', () => {
   it('筆画がなければ修正しない', () => expect(correctionStrokeIndices([])).toEqual([]));
   it('間違いがなければ修正しない', () => expect(correctionStrokeIndices([{ expected: 0, score: 90 }, { expected: 1, score: 55 }])).toEqual([]));
