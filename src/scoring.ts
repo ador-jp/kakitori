@@ -34,8 +34,12 @@ export function resample(points: Stroke, count: number = TOLERANCE.samplePoints)
 export function normalize(strokes: Stroke[]): Stroke[] {
   const points = strokes.flat();
   if (!points.length) return strokes;
-  const xs = points.map(p => p.x), ys = points.map(p => p.y);
-  const minX = Math.min(...xs), minY = Math.min(...ys), size = Math.max(Math.max(...xs) - minX, Math.max(...ys) - minY, 1);
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of points) {
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+  }
+  const size = Math.max(maxX - minX, maxY - minY, 1);
   return strokes.map(s => s.map(p => ({ x: (p.x - minX) / size, y: (p.y - minY) / size })));
 }
 

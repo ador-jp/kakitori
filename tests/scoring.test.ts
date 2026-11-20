@@ -4,6 +4,30 @@ import { correctionStrokeIndices, directionScore, evaluate, isScored, normalize,
 const horizontal: Stroke = [{ x: 10, y: 20 }, { x: 50, y: 20 }, { x: 90, y: 20 }];
 const vertical: Stroke = [{ x: 50, y: 10 }, { x: 50, y: 90 }];
 
+describe('normalization bounds regression', () => {
+  it('scores a 150,001-point stroke without exceeding the argument limit', () => {
+    const stroke = Array.from({ length: 150_001 }, (_, i) => ({ x: i / 150_000 * 80 + 10, y: 20 }));
+    const result = evaluate([stroke], [horizontal]);
+    expect(isScored(result)).toBe(true);
+    expect(Number.isFinite(result.total)).toBe(true);
+    expect(result.total).toBe(100);
+  });
+  it('keeps every normalized coordinate of an ordinary stroke unchanged', () => {
+    expect(normalize([horizontal])).toEqual([[{ x: 0, y: 0 }, { x: 0.5, y: 0 }, { x: 1, y: 0 }]]);
+    expect(normalize([horizontal, vertical])).toEqual([
+      [{ x: 0, y: 0.125 }, { x: 0.5, y: 0.125 }, { x: 1, y: 0.125 }],
+      [{ x: 0.5, y: 0 }, { x: 0.5, y: 1 }]
+    ]);
+  });
+  it('keeps empty and sub-unit bounds unchanged', () => {
+    expect(normalize([])).toEqual([]);
+    expect(normalize([[]])).toEqual([[]]);
+    expect(normalize([[{ x: -2, y: -3 }, { x: -1.5, y: -2.75 }]])).toEqual([
+      [{ x: 0, y: 0 }, { x: 0.5, y: 0.25 }]
+    ]);
+  });
+});
+
 describe('resample endpoint regression', () => {
   const diagonal: Stroke = [{ x: 0, y: 0 }, { x: 0.8, y: 0.076 }];
   const checkSamples = (stroke: Stroke) => {
