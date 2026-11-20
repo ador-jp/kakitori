@@ -1,5 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
+function hasStrokePath(svg) {
+  const markup = svg.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, '');
+  const paths = markup.matchAll(/<path(?=[\s/>])(?:[^"'<>]|"[^"]*"|'[^']*')*>/g);
+  for (const [tag] of paths) {
+    const attributes = tag.matchAll(/([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g);
+    for (const [, name, doubleQuoted, singleQuoted] of attributes) {
+      if (name === 'd' && /^\s*[Mm](?=[\s+\-.\d])/.test(doubleQuoted ?? singleQuoted)) return true;
+    }
+  }
+  return false;
+}
 const root = path.resolve(import.meta.dirname, '..');
 if (process.argv.includes('--check')) {
   const data = JSON.parse(fs.readFileSync(path.join(root, 'public/data/meta.json'), 'utf8'));
@@ -29,7 +40,7 @@ if (process.argv.includes('--check')) {
     if (!assigned.has(char)) issues.push(`学年未配当: ${char}`);
     if (!prompts[char]?.reading || !prompts[char]?.example?.includes(char)) issues.push(`問題データ不正: ${char}`);
     const file = path.join(root, 'public/data/kanji', `${char.codePointAt(0).toString(16).padStart(5, '0')}.svg`);
-    if (!fs.existsSync(file) || !/<path[\s>]/.test(fs.readFileSync(file, 'utf8'))) issues.push(`筆順データ不正: ${char}`);
+    if (!fs.existsSync(file) || !hasStrokePath(fs.readFileSync(file, 'utf8'))) issues.push(`筆順データ不正: ${char}`);
   }
   const report = { checkedAt: new Date().toISOString(), joyo: joyo.length, elementary: ['e1','e2','e3','e4','e5','e6'].reduce((n, g) => n + (Array.isArray(meta[g]) ? meta[g].length : 0), 0), issues };
   fs.writeFileSync(path.join(root, 'validation-report.json'), JSON.stringify(report, null, 2) + '\n');
