@@ -123,6 +123,25 @@ function judge() {
   frames = [];
 }
 
+describe('per-stroke hints', () => {
+  it('logs evaluation errors without throwing or changing the hint', async () => {
+    vi.stubGlobal('DOMParser', class { parseFromString() { return { querySelectorAll: () => [{ getAttribute: () => '' }] }; } });
+    document.createElementNS = vi.fn(() => ({ style: {}, append() {}, remove() {}, setAttribute() {}, getTotalLength: () => 1, getPointAtLength: (x: number) => ({ x, y: 0 }) })) as unknown as typeof document.createElementNS;
+    app.click('[data-kanji="一"]');
+    loads[0].resolve();
+    await settle();
+    const hint = app.querySelector('#hint')!;
+    const previous = hint.textContent;
+    const error = new Error('hint evaluation failed');
+    vi.mocked(evaluate).mockImplementationOnce(() => { throw error; });
+    expect(() => drawStroke()).not.toThrow();
+    expect(evaluate).toHaveBeenCalledOnce();
+    expect(console.error).toHaveBeenCalledExactlyOnceWith(error);
+    expect(hint.textContent).toBe(previous);
+    expect(saveResult).not.toHaveBeenCalled();
+  });
+});
+
 describe('saving judged attempts', () => {
   beforeEach(async () => {
     app.click('[data-kanji="一"]');
