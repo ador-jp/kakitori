@@ -2,20 +2,36 @@ import fs from 'node:fs';
 import path from 'node:path';
 const root = path.resolve(import.meta.dirname, '..');
 if (process.argv.includes('--check')) {
-  const meta = JSON.parse(fs.readFileSync(path.join(root, 'public/data/meta.json'), 'utf8'));
+  const data = JSON.parse(fs.readFileSync(path.join(root, 'public/data/meta.json'), 'utf8'));
+  const meta = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
   const prompts = JSON.parse(fs.readFileSync(path.join(root, 'public/data/prompts.json'), 'utf8'));
-  const expected = { e1: 80, e2: 160, e3: 200, e4: 202, e5: 193, e6: 191, joyo: 2136 };
+  const expected = { e1: 80, e2: 160, e3: 200, e4: 202, e5: 193, e6: 191, j1: 370, j2: 370, j3: 370, joyo: 2136 };
   const issues = [];
+  const joyo = Array.isArray(meta.joyo) ? meta.joyo : [];
+  const joyoSet = new Set(joyo);
+  const assigned = new Map();
   for (const [grade, count] of Object.entries(expected)) {
-    if (meta[grade]?.length !== count) issues.push(`${grade}: ${meta[grade]?.length ?? 0}/${count}字`);
-    if (new Set(meta[grade]).size !== meta[grade]?.length) issues.push(`${grade}: 重複`);
+    if (!Object.hasOwn(meta, grade)) { issues.push(`${grade}: キーがありません`); continue; }
+    const chars = meta[grade];
+    if (!Array.isArray(chars)) { issues.push(`${grade}: 配列ではありません`); continue; }
+    if (chars.length !== count) issues.push(`${grade}: ${chars.length}/${count}字`);
+    if (new Set(chars).size !== chars.length) issues.push(`${grade}: 重複`);
+    for (const char of new Set(chars)) {
+      if (typeof char !== 'string' || [...char].length !== 1) { issues.push(`${grade}: 不正な漢字 ${JSON.stringify(char)}`); continue; }
+      if (!joyoSet.has(char)) issues.push(`${grade}: 常用漢字に含まれません: ${char}`);
+      if (grade === 'joyo') continue;
+      if (assigned.has(char)) issues.push(`${grade}: ${assigned.get(char)} と重複: ${char}`);
+      else assigned.set(char, grade);
+    }
   }
-  for (const char of meta.joyo) {
+  for (const char of joyo) {
+    if (typeof char !== 'string' || [...char].length !== 1) continue;
+    if (!assigned.has(char)) issues.push(`学年未配当: ${char}`);
     if (!prompts[char]?.reading || !prompts[char]?.example?.includes(char)) issues.push(`問題データ不正: ${char}`);
     const file = path.join(root, 'public/data/kanji', `${char.codePointAt(0).toString(16).padStart(5, '0')}.svg`);
     if (!fs.existsSync(file) || !/<path[\s>]/.test(fs.readFileSync(file, 'utf8'))) issues.push(`筆順データ不正: ${char}`);
   }
-  const report = { checkedAt: new Date().toISOString(), joyo: meta.joyo.length, elementary: ['e1','e2','e3','e4','e5','e6'].reduce((n, g) => n + meta[g].length, 0), issues };
+  const report = { checkedAt: new Date().toISOString(), joyo: joyo.length, elementary: ['e1','e2','e3','e4','e5','e6'].reduce((n, g) => n + (Array.isArray(meta[g]) ? meta[g].length : 0), 0), issues };
   fs.writeFileSync(path.join(root, 'validation-report.json'), JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify(report, null, 2));
   if (issues.length) process.exitCode = 1;
