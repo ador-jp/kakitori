@@ -160,7 +160,7 @@ function bindCanvas(result?: Evaluation) {
     resultSaved = false; e.preventDefault(); board.setPointerCapture(e.pointerId);
   };
   board.onpointermove = e => { if (!drawing.move(e, point(e))) return; resultSaved = false; e.preventDefault(); redraw(); };
-  board.onpointerup = e => { if (!drawing.up(e)) return; if (restartingTest) renderPractice(); try { const i = strokes.length - 1; const partial = reference[i] ? evaluate([strokes[i]], [reference[i]]).strokes[0] : null; app.querySelector('#hint')!.textContent = partial && partial.score >= 45 ? `${i + 1}画目：OK！` : reference[i] ? `${i + 1}画目：お手本と見くらべよう` : '画数が多いようです'; } catch (error) { console.error(error); } };
+  board.onpointerup = e => { if (drawing.move(e, point(e))) redraw(); if (!drawing.up(e)) return; if (restartingTest) renderPractice(); try { const i = strokes.length - 1; const partial = reference[i] ? evaluate([strokes[i]], [reference[i]]).strokes[0] : null; app.querySelector('#hint')!.textContent = partial && partial.score >= 45 ? `${i + 1}画目：OK！` : reference[i] ? `${i + 1}画目：お手本と見くらべよう` : '画数が多いようです'; } catch (error) { console.error(error); } };
   board.onpointercancel = board.onlostpointercapture = e => { if (drawing.cancel(e)) { resultSaved = false; if (restartingTest) renderPractice(); else redraw(); } };
 }
 
