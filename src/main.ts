@@ -15,6 +15,7 @@ const labels: Record<string, string> = { e1: '小学1年', e2: '小学2年', e3:
 const app = document.querySelector<HTMLDivElement>('#app')!;
 let meta: Meta, prompts: Prompts | undefined, grade = 'e1', selected = '', mode = 'free', strokes: Stroke[] = [], reference: Stroke[] = [], showModel = true, debug = new URLSearchParams(location.search).has('debug');
 let testQueue: string[] = [], testIndex = 0, testScores: Array<number | undefined> = [];
+let resultSaved = false;
 let slowDemo = loadSlowDemo();
 const referenceLoad = createLatestLoad(loadReference, value => { reference = value; renderPractice(); }, referenceError);
 
@@ -107,6 +108,7 @@ function referenceError(error: unknown) {
 }
 
 async function practice(char: string) {
+  resultSaved = false;
   selected = char; strokes = []; reference = []; showModel = mode !== 'test'; setQuery({ grade, ...(mode === 'test' ? {} : { kanji: char }), mode, ...(debug ? { debug: '1' } : {}) });
   app.innerHTML = '<header class="compact"><button class="back">← 漢字一覧</button><h1>読み込み中</h1></header><main><p role="status">お手本を読み込んでいます…</p></main>';
   app.querySelector<HTMLButtonElement>('.back')!.onclick = () => choose(grade);
@@ -126,11 +128,11 @@ function renderPractice(result?: Evaluation) {
   const modeSelect = app.querySelector<HTMLSelectElement>('#mode'); if (modeSelect) modeSelect.value = mode;
   bindCanvas();
   app.querySelector<HTMLButtonElement>('.back')!.onclick = () => choose(grade);
-  if (modeSelect) modeSelect.onchange = e => { const requested = (e.target as HTMLSelectElement).value; const changeMode = () => { mode = requested; showModel = mode !== 'test'; renderPractice(); }; if (requested === 'test') { modeSelect.value = mode; enterTest(changeMode); } else changeMode(); };
-  app.querySelector<HTMLButtonElement>('#undo')!.onclick = () => { strokes.pop(); renderPractice(); };
-  app.querySelector<HTMLButtonElement>('#clear')!.onclick = () => { strokes = []; renderPractice(); };
+  if (modeSelect) modeSelect.onchange = e => { const requested = (e.target as HTMLSelectElement).value; const changeMode = () => { mode = requested; resultSaved = false; showModel = mode !== 'test'; renderPractice(); }; if (requested === 'test') { modeSelect.value = mode; enterTest(changeMode); } else changeMode(); };
+  app.querySelector<HTMLButtonElement>('#undo')!.onclick = () => { strokes.pop(); resultSaved = false; renderPractice(); };
+  app.querySelector<HTMLButtonElement>('#clear')!.onclick = () => { strokes = []; resultSaved = false; renderPractice(); };
   const modelButton = app.querySelector<HTMLButtonElement>('#model'); if (modelButton) modelButton.onclick = showDemo;
-  app.querySelector<HTMLButtonElement>('#judge')!.onclick = e => { const button = e.currentTarget as HTMLButtonElement; button.disabled = true; button.textContent = '判定中…'; requestAnimationFrame(() => { if (app.querySelector('#judge') !== button) return; try { const r = evaluate(strokes, reference); if (!isScored(r)) { button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = r.messages[0]; return; } if (testQueue.length) testScores[testIndex] = r.total; showModel = true; renderPractice(r); saveResult(selected, r.total); requestAnimationFrame(() => app.querySelector<HTMLElement>('.result')?.focus()); } catch (error) { console.error(error); button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = '判定できませんでした。もう一度押してください。'; } }); };
+  app.querySelector<HTMLButtonElement>('#judge')!.onclick = e => { const button = e.currentTarget as HTMLButtonElement; button.disabled = true; button.textContent = '判定中…'; requestAnimationFrame(() => { if (app.querySelector('#judge') !== button) return; try { const r = evaluate(strokes, reference); if (!isScored(r)) { button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = r.messages[0]; return; } if (testQueue.length) testScores[testIndex] = r.total; showModel = true; renderPractice(r); if (!resultSaved) { saveResult(selected, r.total); resultSaved = true; } requestAnimationFrame(() => app.querySelector<HTMLElement>('.result')?.focus()); } catch (error) { console.error(error); button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = '判定できませんでした。もう一度押してください。'; } }); };
   app.querySelector<HTMLButtonElement>('#next')!.onclick = next;
 }
 
@@ -138,10 +140,10 @@ function bindCanvas() {
   const board = app.querySelector<SVGSVGElement>('#board')!, drawing = createPointerStroke(strokes);
   const point = (e: PointerEvent): Point => { const r = board.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) }; };
   const redraw = () => { board.querySelectorAll('.student').forEach(n => n.remove()); board.insertAdjacentHTML('beforeend', studentPaths()); };
-  board.onpointerdown = e => { if (!drawing.down(e, point(e))) return; e.preventDefault(); board.setPointerCapture(e.pointerId); };
-  board.onpointermove = e => { if (!drawing.move(e, point(e))) return; e.preventDefault(); redraw(); };
+  board.onpointerdown = e => { if (!drawing.down(e, point(e))) return; resultSaved = false; e.preventDefault(); board.setPointerCapture(e.pointerId); };
+  board.onpointermove = e => { if (!drawing.move(e, point(e))) return; resultSaved = false; e.preventDefault(); redraw(); };
   board.onpointerup = e => { if (!drawing.up(e)) return; const i = strokes.length - 1; const partial = reference[i] ? evaluate([strokes[i]], [reference[i]]).strokes[0] : null; app.querySelector('#hint')!.textContent = partial && partial.score >= 45 ? `${i + 1}画目：OK！` : reference[i] ? `${i + 1}画目：お手本と見くらべよう` : '画数が多いようです'; };
-  board.onpointercancel = board.onlostpointercapture = e => { if (drawing.cancel(e)) redraw(); };
+  board.onpointercancel = board.onlostpointercapture = e => { if (drawing.cancel(e)) { resultSaved = false; redraw(); } };
 }
 
 function resultHtml(r: Evaluation) { return `<section class="result ${r.passed ? 'passed' : 'needs-work'}" tabindex="-1" role="status"><h2>${r.passed ? '◎ ' : ''}${r.total}点</h2><p>${r.passed ? 'たいへんよくできました！' : '赤い線のところを、お手本と見くらべよう'}</p><div class="scores"><span>書き順 <b>${r.order}点</b></span><span>書く方向 <b>${r.direction}点</b></span><span>位置 <b>${r.position}点</b></span><span>形 <b>${r.shape}点</b></span></div><ul>${r.messages.map(m => `<li>${m}</li>`).join('')}</ul></section>`; }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { evaluate } from '../src/scoring';
+import { evaluate, isScored } from '../src/scoring';
 import { saveResult } from '../src/storage';
 
 vi.mock('virtual:pwa-register', () => ({ registerSW: vi.fn() }));
@@ -8,7 +8,7 @@ vi.mock('../src/selection', async importOriginal => ({ ...await importOriginal<t
 vi.mock('../src/storage', () => ({ loadProgress: () => ({}), saveResult: vi.fn() }));
 vi.mock('../src/scoring', () => ({
   evaluate: vi.fn(() => ({ total: 85, strokes: [], messages: [], passed: true })),
-  isScored: () => true,
+  isScored: vi.fn(() => true),
   correctionStrokeIndices: () => []
 }));
 
@@ -24,6 +24,10 @@ class Screen {
     for (const tag of html.matchAll(/<[^/!][^>]*>/g)) {
       const id = tag[0].match(/id="([^"]+)"/), classes = tag[0].match(/class="([^"]+)"/);
       const node: Node = { value: tag[0].match(/value="([^"]*)"/)?.[1] || '' };
+      if (id?.[1] === 'board') Object.assign(node, {
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }),
+        setPointerCapture() {}, querySelectorAll: () => [], insertAdjacentHTML() {}
+      });
       node.remove = () => {
         this.html = this.html.replace(/<section id="prompt-notice"[\s\S]*?<\/section>/, '');
         this.nodes.delete('#prompt-notice'); this.nodes.delete('#prompt-retry');
@@ -104,6 +108,129 @@ async function restart(overrides: { prompts?: () => Promise<unknown>; meta?: () 
 
 const promptMessage = 'テスト問題を読み込めませんでした。通信状態を確認して、もう一度お試しください。';
 const promptResponse = () => Promise.resolve({ ok: true, json: () => ({ 一: { reading: 'いち', example: '一' }, 二: { reading: 'に', example: '二' } }) });
+
+function drawStroke() {
+  const board = app.querySelector('#board')!;
+  const event = { pointerId: 1, isPrimary: true, clientX: 10, clientY: 20, preventDefault() {} };
+  (board.onpointerdown as (event: unknown) => void)(event);
+  (board.onpointermove as (event: unknown) => void)({ ...event, clientX: 80 });
+  (board.onpointerup as (event: unknown) => void)(event);
+}
+
+function judge() {
+  app.click('#judge');
+  frames.shift()!(0);
+  frames = [];
+}
+
+describe('saving judged attempts', () => {
+  beforeEach(async () => {
+    app.click('[data-kanji="一"]');
+    loads[0].resolve();
+    await settle();
+    drawStroke();
+  });
+
+  it('shows repeated results but saves an unchanged drawing only once', () => {
+    judge();
+    judge();
+    expect(evaluate).toHaveBeenCalledTimes(2);
+    expect(app.innerHTML).toContain('85点');
+    expect(saveResult).toHaveBeenCalledExactlyOnceWith('一', 85);
+  });
+
+  it('saves again after adding a stroke', () => {
+    judge();
+    drawStroke();
+    judge();
+    judge();
+    expect(saveResult).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(evaluate).mock.calls.at(-1)![0]).toHaveLength(2);
+  });
+
+  it.each(['#clear', '#undo'])('saves a new attempt after %s and redrawing', control => {
+    judge();
+    app.click(control);
+    drawStroke();
+    judge();
+    judge();
+    expect(saveResult).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(evaluate).mock.calls.at(-1)![0]).toHaveLength(1);
+  });
+
+  it('saves again on the next kanji', async () => {
+    judge();
+    app.click('#next');
+    loads[1].resolve();
+    await settle();
+    drawStroke();
+    judge();
+    judge();
+    expect(saveResult).toHaveBeenCalledTimes(2);
+    expect(saveResult).toHaveBeenLastCalledWith('二', 85);
+  });
+
+  it('saves again when starting the same kanji anew', async () => {
+    judge();
+    app.click('.back');
+    app.click('[data-kanji="一"]');
+    loads[1].resolve();
+    await settle();
+    drawStroke();
+    judge();
+    expect(saveResult).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats a mode change as a new attempt even with unchanged strokes', () => {
+    judge();
+    const select = app.querySelector('#mode')!;
+    select.value = 'order';
+    (select.onchange as (event: unknown) => void)({ target: select });
+    judge();
+    judge();
+    expect(saveResult).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not consume the save when evaluation fails or is unscored', () => {
+    vi.mocked(evaluate).mockImplementationOnce(() => { throw new Error('evaluation failed'); });
+    judge();
+    vi.mocked(isScored).mockReturnValueOnce(false);
+    judge();
+    expect(saveResult).not.toHaveBeenCalled();
+    judge();
+    judge();
+    expect(saveResult).toHaveBeenCalledExactlyOnceWith('一', 85);
+  });
+
+  it('updates test question scores on every judge but saves once per attempt', async () => {
+    app.click('.back');
+    await startTest();
+    drawStroke();
+    judge();
+    const result = vi.mocked(evaluate).mock.results.at(-1)!.value;
+    vi.mocked(evaluate).mockReturnValueOnce({ ...result, total: 65 });
+    judge();
+    expect(saveResult).toHaveBeenCalledTimes(1);
+    app.click('#next');
+    loads.at(-1)!.resolve();
+    await settle();
+    drawStroke();
+    judge();
+    judge();
+    expect(saveResult).toHaveBeenCalledTimes(2);
+    expect(saveResult).toHaveBeenLastCalledWith('二', 85);
+    app.click('#next');
+    expect(app.innerHTML).toContain('平均 75点');
+    expect(app.innerHTML).toContain('<b>一</b>65点');
+    expect(app.innerHTML).toContain('<b>二</b>85点');
+    app.click('#retry');
+    loads.at(-1)!.resolve();
+    await settle();
+    drawStroke();
+    judge();
+    expect(saveResult).toHaveBeenCalledTimes(3);
+  });
+});
 
 describe('grade parameters', () => {
   it.each(['constructor', '__proto__', 'toString', 'hasOwnProperty', 'unknown', ''])('falls back to the e1 list for grade=%s', async grade => {
