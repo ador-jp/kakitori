@@ -105,6 +105,42 @@ async function restart(overrides: { prompts?: () => Promise<unknown>; meta?: () 
 const promptMessage = 'テスト問題を読み込めませんでした。通信状態を確認して、もう一度お試しください。';
 const promptResponse = () => Promise.resolve({ ok: true, json: () => ({ 一: { reading: 'いち', example: '一' }, 二: { reading: 'に', example: '二' } }) });
 
+describe('grade parameters', () => {
+  it.each(['constructor', '__proto__', 'toString', 'hasOwnProperty', 'unknown', ''])('falls back to the e1 list for grade=%s', async grade => {
+    await restart({}, `?grade=${grade}`);
+    expect(app.innerHTML).toContain('<h1>小学1年</h1>');
+    expect(app.innerHTML).toContain('練習する漢字を選んでください');
+    expect(app.querySelector('[data-kanji="一"]')).not.toBeNull();
+    expect(history.replaceState).toHaveBeenLastCalledWith(null, '', '?grade=e1');
+  });
+
+  it.each([['e3', '小学3年'], ['joyo', '常用漢字']])('keeps the supported grade %s', async (grade, title) => {
+    await restart({}, `?grade=${grade}`);
+    expect(app.innerHTML).toContain(`<h1>${title}</h1>`);
+    expect(app.innerHTML).toContain('練習する漢字を選んでください');
+    expect(history.replaceState).toHaveBeenLastCalledWith(null, '', `?grade=${grade}`);
+  });
+
+  it.each(['inherited', 'non-array', 'unsupported'])('rejects %s metadata grade entries', async kind => {
+    const data = Object.assign(Object.create({ e3: ['三'] }), { e1: ['一', '二'], joyo: ['一', '二'], extra: ['三'] });
+    if (kind === 'non-array') data.e3 = '三';
+    await restart({ meta: () => Promise.resolve({ ok: true, json: () => data }) }, `?grade=${kind === 'unsupported' ? 'extra' : 'e3'}`);
+    expect(app.innerHTML).toContain('<h1>小学1年</h1>');
+    expect(app.querySelector('[data-kanji="一"]')).not.toBeNull();
+  });
+
+  it('uses the fallback grade for next-kanji navigation', async () => {
+    await restart({}, '?grade=constructor&kanji=一');
+    loads[0].resolve();
+    await settle();
+    app.click('#next');
+    expect(fetch).toHaveBeenLastCalledWith('./data/kanji/04e8c.svg');
+    loads[1].resolve();
+    await settle();
+    expect(app.innerHTML).toContain('「二」の練習');
+  });
+});
+
 describe('independent prompt loading', () => {
   it('waits for pending prompts before entering a test deep link', async () => {
     let resolvePrompts!: (response: unknown) => void;
