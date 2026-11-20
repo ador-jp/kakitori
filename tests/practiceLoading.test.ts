@@ -110,9 +110,10 @@ const promptMessage = 'テスト問題を読み込めませんでした。通信
 const promptResponse = () => Promise.resolve({ ok: true, json: () => ({ 一: { reading: 'いち', example: '一' }, 二: { reading: 'に', example: '二' } }) });
 
 function drawStroke() {
-  const board = app.querySelector('#board')!;
+  let board = app.querySelector('#board')!;
   const event = { pointerId: 1, isPrimary: true, clientX: 10, clientY: 20, preventDefault() {} };
   (board.onpointerdown as (event: unknown) => void)(event);
+  board = app.querySelector('#board')!;
   (board.onpointermove as (event: unknown) => void)({ ...event, clientX: 80 });
   (board.onpointerup as (event: unknown) => void)(event);
 }
@@ -139,6 +140,96 @@ describe('per-stroke hints', () => {
     expect(console.error).toHaveBeenCalledExactlyOnceWith(error);
     expect(hint.textContent).toBe(previous);
     expect(saveResult).not.toHaveBeenCalled();
+  });
+});
+
+describe('new answers after judging', () => {
+  beforeEach(() => {
+    vi.stubGlobal('DOMParser', class { parseFromString() { return { querySelectorAll: () => [{ getAttribute: () => '' }] }; } });
+    document.createElementNS = vi.fn(() => ({ style: {}, append() {}, remove() {}, setAttribute() {}, getTotalLength: () => 1, getPointAtLength: (x: number) => ({ x, y: 0 }) })) as unknown as typeof document.createElementNS;
+  });
+
+  const expectUnanswered = () => {
+    expect(app.innerHTML).toContain('<h2>もんだい</h2>');
+    expect(app.innerHTML).not.toContain('class="ref ');
+    expect(app.querySelector('.result')).toBeNull();
+    expect(app.querySelector('#model')).toBeNull();
+  };
+
+  it.each(['#clear', '#undo'])('hides the model and clears the result after %s in test mode', async control => {
+    await startTest();
+    drawStroke();
+    judge();
+    expect(app.innerHTML).toContain('class="ref ');
+    expect(app.querySelector('.result')).not.toBeNull();
+    app.click(control);
+    expectUnanswered();
+    drawStroke();
+    judge();
+    judge();
+    expect(saveResult).toHaveBeenCalledTimes(2);
+    app.click('#next');
+    loads.at(-1)!.resolve();
+    await settle();
+    expectUnanswered();
+    app.click('#next');
+    expect(app.innerHTML).toContain('<b>一</b>85点');
+  });
+
+  it('keeps the board stationary and preserves pointer coordinates until pointerup', async () => {
+    await startTest();
+    drawStroke();
+    judge();
+    const board = app.querySelector('#board')!;
+    board.getBoundingClientRect = () => ({ left: 0, top: 100, width: 100, height: 100 });
+    const remove = vi.fn();
+    board.querySelectorAll = vi.fn(() => [{ remove }]);
+    const event = { pointerId: 1, isPrimary: true, clientX: 10, clientY: 120, preventDefault() {} };
+    (board.onpointerdown as (event: unknown) => void)({ ...event, isPrimary: false });
+    expect(app.querySelector('.result')).not.toBeNull();
+    (board.onpointerdown as (event: unknown) => void)(event);
+    expect(app.querySelector('#board')).toBe(board);
+    expect(app.querySelector('.result')).not.toBeNull();
+    expect(board.querySelectorAll).toHaveBeenCalledWith('.ref,.number,.correction,.success-circle,.success-mark');
+    expect(remove).toHaveBeenCalled();
+    (board.onpointermove as (event: unknown) => void)({ ...event, clientX: 80 });
+    expect(app.querySelector('#board')).toBe(board);
+    (board.onpointerup as (event: unknown) => void)(event);
+    expectUnanswered();
+    judge();
+    judge();
+    expect(saveResult).toHaveBeenCalledTimes(2);
+    const strokes = vi.mocked(evaluate).mock.calls.at(-1)![0];
+    expect(strokes).toHaveLength(2);
+    expect(strokes[1]).toEqual([{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.2 }]);
+  });
+
+  it.each(['onpointercancel', 'onlostpointercapture'])('returns to the unanswered screen after %s', async handler => {
+    await startTest();
+    drawStroke();
+    judge();
+    const board = app.querySelector('#board')!;
+    const event = { pointerId: 1, isPrimary: true, clientX: 10, clientY: 20, preventDefault() {} };
+    (board.onpointerdown as (event: unknown) => void)(event);
+    (board[handler] as (event: unknown) => void)(event);
+    expectUnanswered();
+    judge();
+    expect(vi.mocked(evaluate).mock.calls.at(-1)![0]).toHaveLength(1);
+  });
+
+  it.each(['free', 'order'])('keeps the model visible after clearing in %s mode', async mode => {
+    app.click('[data-kanji="一"]');
+    loads[0].resolve();
+    await settle();
+    const select = app.querySelector('#mode')!;
+    select.value = mode;
+    (select.onchange as (event: unknown) => void)({ target: select });
+    drawStroke();
+    judge();
+    app.click('#clear');
+    expect(app.innerHTML).toContain('class="ref ');
+    expect(app.querySelector('#model')).not.toBeNull();
+    expect(app.querySelector('.result')).toBeNull();
   });
 });
 

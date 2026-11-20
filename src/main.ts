@@ -122,11 +122,12 @@ function testQuestion(result?: Evaluation) { const prompt = prompts?.[selected];
 
 function renderPractice(result?: Evaluation) {
   const activeTest = mode === 'test' && !result;
+  if (activeTest) showModel = false;
   const title = activeTest ? `テスト${testQueue.length ? ` ${testIndex + 1}問目` : ''}` : mode === 'test' ? `答え：「${selected}」` : `「${selected}」の練習`;
   const toolbar = activeTest ? '<div class="toolbar"><span>テストモード</span></div>' : `<div class="toolbar" role="group" aria-label="練習モード"><label>モード <select id="mode"><option value="free">自由練習</option><option value="order">書き順練習</option><option value="test">テスト</option></select></label><span>正しい画数：${reference.length}画</span></div>`;
   app.innerHTML = `<header class="compact"><button class="back">← 漢字一覧</button><h1>${title}</h1></header><main class="practice">${testQueue.length ? `<p class="test-progress">テスト ${testIndex + 1} / ${testQueue.length}問</p>` : ''}${testQuestion(result)}${toolbar}${result ? resultHtml(result) : ''}<div class="board-wrap"><svg id="board" viewBox="0 0 100 100" aria-label="漢字を書く場所"><line x1="50" y1="0" x2="50" y2="100"/><line x1="0" y1="50" x2="100" y2="50"/>${showModel ? referencePaths() : ''}${result ? correctionPaths(result) : ''}${studentPaths(result)}${result?.passed ? '<circle class="success-circle" cx="50" cy="50" r="45"/><text class="success-mark" x="50" y="57">○</text>' : ''}</svg></div><p id="hint" class="hint" aria-live="polite">${strokes.length ? `${strokes.length}画目を書きました` : '枠の中に書いてみよう'}</p><div class="actions"><button id="undo">一画戻す</button><button id="clear">全部消す</button>${activeTest ? '' : '<button id="model">お手本を見る</button>'}<button id="judge" class="primary">判定する</button><button id="next">${testQueue.length && testIndex === testQueue.length - 1 ? 'テスト結果' : '次の漢字'}</button></div>${debug ? debugHtml(result) : ''}</main>`;
   const modeSelect = app.querySelector<HTMLSelectElement>('#mode'); if (modeSelect) modeSelect.value = mode;
-  bindCanvas();
+  bindCanvas(result);
   app.querySelector<HTMLButtonElement>('.back')!.onclick = () => choose(grade);
   if (modeSelect) modeSelect.onchange = e => { const requested = (e.target as HTMLSelectElement).value; const changeMode = () => { mode = requested; resultSaved = false; showModel = mode !== 'test'; renderPractice(); }; if (requested === 'test') { modeSelect.value = mode; enterTest(changeMode); } else changeMode(); };
   app.querySelector<HTMLButtonElement>('#undo')!.onclick = () => { strokes.pop(); resultSaved = false; renderPractice(); };
@@ -136,14 +137,23 @@ function renderPractice(result?: Evaluation) {
   app.querySelector<HTMLButtonElement>('#next')!.onclick = next;
 }
 
-function bindCanvas() {
+function bindCanvas(result?: Evaluation) {
   const board = app.querySelector<SVGSVGElement>('#board')!, drawing = createPointerStroke(strokes);
+  let restartingTest = false;
   const point = (e: PointerEvent): Point => { const r = board.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) }; };
   const redraw = () => { board.querySelectorAll('.student').forEach(n => n.remove()); board.insertAdjacentHTML('beforeend', studentPaths()); };
-  board.onpointerdown = e => { if (!drawing.down(e, point(e))) return; resultSaved = false; e.preventDefault(); board.setPointerCapture(e.pointerId); };
+  board.onpointerdown = e => {
+    if (!drawing.down(e, point(e))) return;
+    if (mode === 'test' && result) {
+      restartingTest = true; showModel = false;
+      board.querySelectorAll('.ref,.number,.correction,.success-circle,.success-mark').forEach(n => n.remove());
+      redraw();
+    }
+    resultSaved = false; e.preventDefault(); board.setPointerCapture(e.pointerId);
+  };
   board.onpointermove = e => { if (!drawing.move(e, point(e))) return; resultSaved = false; e.preventDefault(); redraw(); };
-  board.onpointerup = e => { if (!drawing.up(e)) return; try { const i = strokes.length - 1; const partial = reference[i] ? evaluate([strokes[i]], [reference[i]]).strokes[0] : null; app.querySelector('#hint')!.textContent = partial && partial.score >= 45 ? `${i + 1}画目：OK！` : reference[i] ? `${i + 1}画目：お手本と見くらべよう` : '画数が多いようです'; } catch (error) { console.error(error); } };
-  board.onpointercancel = board.onlostpointercapture = e => { if (drawing.cancel(e)) { resultSaved = false; redraw(); } };
+  board.onpointerup = e => { if (!drawing.up(e)) return; if (restartingTest) renderPractice(); try { const i = strokes.length - 1; const partial = reference[i] ? evaluate([strokes[i]], [reference[i]]).strokes[0] : null; app.querySelector('#hint')!.textContent = partial && partial.score >= 45 ? `${i + 1}画目：OK！` : reference[i] ? `${i + 1}画目：お手本と見くらべよう` : '画数が多いようです'; } catch (error) { console.error(error); } };
+  board.onpointercancel = board.onlostpointercapture = e => { if (drawing.cancel(e)) { resultSaved = false; if (restartingTest) renderPractice(); else redraw(); } };
 }
 
 function resultHtml(r: Evaluation) { return `<section class="result ${r.passed ? 'passed' : 'needs-work'}" tabindex="-1" role="status"><h2>${r.passed ? '◎ ' : ''}${r.total}点</h2><p>${r.passed ? 'たいへんよくできました！' : '赤い線のところを、お手本と見くらべよう'}</p><div class="scores"><span>書き順 <b>${r.order}点</b></span><span>書く方向 <b>${r.direction}点</b></span><span>位置 <b>${r.position}点</b></span><span>形 <b>${r.shape}点</b></span></div><ul>${r.messages.map(m => `<li>${m}</li>`).join('')}</ul></section>`; }
