@@ -3,13 +3,17 @@ import path from 'node:path';
 function hasStrokePath(svg) {
   const markup = svg.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, '');
   const paths = markup.matchAll(/<path(?=[\s/>])(?:[^"'<>]|"[^"]*"|'[^']*')*>/g);
+  let hasPath = false;
   for (const [tag] of paths) {
+    hasPath = true;
+    let valid = false;
     const attributes = tag.matchAll(/([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g);
     for (const [, name, doubleQuoted, singleQuoted] of attributes) {
-      if (name === 'd' && /^\s*[Mm](?=[\s+\-.\d])/.test(doubleQuoted ?? singleQuoted)) return true;
+      if (name === 'd' && /^\s*[Mm](?=[\s+\-.\d])/.test(doubleQuoted ?? singleQuoted)) valid = true;
     }
+    if (!valid) return false;
   }
-  return false;
+  return hasPath;
 }
 const root = path.resolve(import.meta.dirname, '..');
 if (process.argv.includes('--check')) {
