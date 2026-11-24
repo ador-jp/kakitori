@@ -24,7 +24,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) regist
 function urlFor(char: string) { return `./data/kanji/${char.codePointAt(0)!.toString(16).padStart(5, '0')}.svg`; }
 function setQuery(values: Record<string, string>) { const q = new URLSearchParams(values); history.replaceState(null, '', `?${q}`); }
 function escapeHtml(value: string) { const el = document.createElement('span'); el.textContent = value; return el.innerHTML; }
-function validGrade(key: string) { return Object.hasOwn(labels, key) && Object.hasOwn(meta, key) && Array.isArray(meta[key]) ? key : 'e1'; }
+function validGrade(key: string) { return Object.prototype.hasOwnProperty.call(labels, key) && Object.prototype.hasOwnProperty.call(meta, key) && Array.isArray(meta[key]) ? key : 'e1'; }
 
 async function loadPrompts() {
   try {

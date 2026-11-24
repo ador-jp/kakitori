@@ -3,6 +3,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   base: './',
+  build: { target: 'safari15' },
   plugins: [VitePWA({
     registerType: 'autoUpdate',
     includeAssets: ['data/meta.json', 'kakitori-icon*.png'],
