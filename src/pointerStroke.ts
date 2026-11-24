@@ -7,8 +7,8 @@ export function createPointerStroke(strokes: Stroke[]) {
   let current: Stroke | null = null;
   const owns = (event: Pointer) => event.isPrimary && event.pointerId === activeId;
   return {
-    down(event: Pointer, point: Point) {
-      if (!event.isPrimary || activeId !== null) return false;
+    down(event: Pointer & { button?: number }, point: Point) {
+      if (!event.isPrimary || activeId !== null || (event.button ?? 0) !== 0) return false;
       activeId = event.pointerId;
       current = [point];
       strokes.push(current);
