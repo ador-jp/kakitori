@@ -16,7 +16,7 @@ export function createPointerStroke(strokes: Stroke[]) {
     },
     move(event: Pointer, point: Point) {
       if (!owns(event) || !current) return false;
-      const last = current.at(-1)!;
+      const last = current[current.length - 1];
       if (Math.hypot(point.x - last.x, point.y - last.y) <= .004) return false;
       current.push(point);
       return true;
