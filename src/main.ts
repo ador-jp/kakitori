@@ -123,7 +123,7 @@ async function practice(char: string) {
   await referenceLoad.run(char);
 }
 
-function referencePaths(animated = false) { return reference.map((s, i) => `<polyline class="ref ${animated ? 'animate' : ''}" style="--i:${i}" points="${s.map(p => `${p.x * 100},${p.y * 100}`).join(' ')}"/><text class="number" x="${s[0].x * 100}" y="${s[0].y * 100}">${i + 1}</text>`).join(''); }
+function referencePaths(animated = false) { return reference.map((s, i) => `<polyline class="ref ${animated ? 'animate' : ''}" pathLength="160" style="--i:${i}" points="${s.map(p => `${p.x * 100},${p.y * 100}`).join(' ')}"/><text class="number" x="${s[0].x * 100}" y="${s[0].y * 100}">${i + 1}</text>`).join(''); }
 function studentPaths(result?: Evaluation) { return strokes.map((s, i) => `<polyline class="student ${result && (!result.strokes[i] || result.strokes[i].score < 55 || result.strokes[i].expected !== i) ? 'wrong' : result ? 'correct' : ''}" data-stroke="${i}" points="${s.map(p => `${p.x * 100},${p.y * 100}`).join(' ')}"/>`).join(''); }
 function correctionPaths(result: Evaluation) { return correctionStrokeIndices(result.strokes).map(i => reference[i] ? `<polyline class="correction" points="${reference[i].map(p => `${p.x * 100},${p.y * 100}`).join(' ')}"/>` : '').join(''); }
 function testQuestion(result?: Evaluation) { const prompt = prompts?.[selected]; if (mode !== 'test' || !prompt) return ''; const reading = escapeHtml(prompt.reading), example = escapeHtml(prompt.example.replaceAll(selected, '□')); return result ? `<section class="test-question answered"><h2>答え：「${selected}」</h2><p>読み：${reading}</p></section>` : `<section class="test-question"><h2>もんだい</h2><p>読み：<strong>${reading}</strong></p><p>例文：${example}</p><strong>□に入る漢字を一字で書きましょう。</strong></section>`; }

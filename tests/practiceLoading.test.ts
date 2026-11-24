@@ -841,3 +841,22 @@ describe('practice reference loading screens', () => {
     expect(app.innerHTML).toContain('テスト 2問目');
   });
 });
+
+describe('model stroke animation lengths', () => {
+  it.each([[80], [220], [80, 220], []])('normalizes reference dash lengths for source paths %j', async (...lengths: number[]) => {
+    vi.stubGlobal('DOMParser', class {
+      parseFromString() { return { querySelectorAll: () => lengths.map(length => ({ getAttribute: () => String(length) })) }; }
+    });
+    vi.spyOn(document, 'createElementNS').mockImplementation(((_namespace: string, tag: string) => {
+      let length = 0;
+      return tag === 'svg' ? { namespaceURI: 'http://www.w3.org/2000/svg', style: {}, append() {}, remove() {} }
+        : { setAttribute: (_name: string, value: string) => { length = Number(value); }, getTotalLength: () => length, getPointAtLength: (x: number) => ({ x, y: 0 }) };
+    }) as typeof document.createElementNS);
+    app.click('[data-kanji="一"]');
+    loads[0].resolve();
+    await settle();
+    const paths = [...app.innerHTML.matchAll(/<polyline class="ref [^"]*"[^>]*>/g)].map(match => match[0]);
+    expect(paths).toHaveLength(lengths.length);
+    for (const path of paths) expect(path).toContain('pathLength="160"');
+  });
+});
