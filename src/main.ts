@@ -21,7 +21,7 @@ const referenceLoad = createLatestLoad(loadReference, value => { reference = val
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) registerSafeUpdate(() => ({
   unjudgedAnswer: strokes.length > 0 && !resultSaved && !!app.querySelector('#board'),
-  activeTest: testQueue.length > 0 && testIndex < testQueue.length
+  activeTest: testQueue.length > 0
 }));
 
 function urlFor(char: string) { return `./data/kanji/${char.codePointAt(0)!.toString(16).padStart(5, '0')}.svg`; }

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { evaluate, isScored } from '../src/scoring';
 import { saveResult } from '../src/storage';
+import { registerSW } from 'virtual:pwa-register';
 
 vi.mock('virtual:pwa-register', () => ({ registerSW: vi.fn() }));
 vi.mock('../src/preferences', () => ({ loadSlowDemo: () => false }));
@@ -123,6 +124,32 @@ function judge() {
   frames.shift()!(0);
   frames = [];
 }
+
+it.each(['#finish', '.back'])('keeps a pending update deferred on test results until leaving via %s', async exit => {
+  const events = new EventTarget(), reload = vi.fn();
+  Object.assign(document, { addEventListener: events.addEventListener.bind(events), visibilityState: 'visible' });
+  vi.stubGlobal('location', { search: '?grade=e1', protocol: 'https:', reload });
+  vi.stubGlobal('navigator', { serviceWorker: {} });
+  vi.resetModules();
+  await import('../src/main');
+  await settle();
+  await startTest();
+  vi.mocked(registerSW).mock.calls[0][0]!.onNeedReload!();
+  expect(reload).not.toHaveBeenCalled();
+  app.click('#next'); loads[loads.length - 1].resolve(); await settle();
+  app.click('#next');
+  events.dispatchEvent(new Event('click'));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(app.innerHTML).toContain('<h1>テスト結果</h1>');
+  expect(reload).not.toHaveBeenCalled();
+  Object.assign(document, { visibilityState: 'hidden' });
+  events.dispatchEvent(new Event('visibilitychange'));
+  expect(reload).not.toHaveBeenCalled();
+  app.click(exit);
+  events.dispatchEvent(new Event('click'));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(reload).toHaveBeenCalledOnce();
+});
 
 describe('combined list filters', () => {
   const visible = () => app.querySelectorAll('[data-kanji]').filter(button => !button.hidden).map(button => (button.dataset as { kanji: string }).kanji);
