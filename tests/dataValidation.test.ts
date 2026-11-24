@@ -76,6 +76,10 @@ describe('data validation CLI', () => {
     { name: 'commented-out path', path: '<!-- <path d="M0,0 L10,20"/> -->', valid: false },
     { name: 'unrelated attribute', path: '<path data-d="M0,0 L10,20"/>', valid: false },
     { name: 'valid path without an id', path: '<path d="M0,0 L10,20"/>', valid: true },
+    { name: 'valid path followed by empty d', path: '<path d="M0,0 L10,20"/><path d=""/>', valid: false },
+    { name: 'valid path followed by missing d', path: '<path d="M0,0 L10,20"/><path/>', valid: false },
+    { name: 'multiple valid paths', path: '<path d="M0,0 L10,20"/><path d="m1,2 l3,4"/>', valid: true },
+    { name: 'valid path with ignored comment and CDATA', path: '<path d="M0,0 L10,20"/><!-- <path/> --><![CDATA[<path d=""/>]]>', valid: true },
     { name: 'relative move with single quotes', path: "<g><path d='  m0,0 l10,20'/></g>", valid: true }
   ])('validates SVG stroke data: $name', ({ path, valid }) => {
     const file = join(root, 'public/data/kanji/04e00.svg');
