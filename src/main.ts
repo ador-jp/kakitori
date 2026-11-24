@@ -99,7 +99,12 @@ function list(title: string, chars: string[]) {
     from = Number((app.querySelector('#from') as HTMLInputElement).value || 1); to = Number((app.querySelector('#to') as HTMLInputElement).value || chars.length);
     applyFilters();
   };
-  app.querySelector<HTMLButtonElement>('#random')!.onclick = () => { const char = randomItem(chars); if (char === undefined) return; testQueue = []; mode = modeForKanjiSelection(mode); practice(char); };
+  app.querySelector<HTMLButtonElement>('#random')!.onclick = () => {
+    const filtered = buttons.filter(b => !b.hidden).map(b => b.dataset.kanji!);
+    const char = randomItem(filtered.length ? filtered : chars);
+    if (char === undefined) return;
+    testQueue = []; mode = modeForKanjiSelection(mode); practice(char);
+  };
   app.querySelector<HTMLButtonElement>('#start-test')!.onclick = () => {
     const from = Number((app.querySelector('#from') as HTMLInputElement).value), to = Number((app.querySelector('#to') as HTMLInputElement).value), count = Number((app.querySelector('#test-count') as HTMLInputElement).value), error = app.querySelector<HTMLElement>('#test-error')!;
     error.textContent = rangeTestError(chars.length, from, to, count);
