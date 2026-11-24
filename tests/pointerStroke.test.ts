@@ -12,6 +12,29 @@ function setup() {
 }
 
 describe('single pointer strokes', () => {
+  it.each([1, 2, 5])('ignores button %s on the primary pointer without recording or claiming a stroke', button => {
+    const { strokes, drawing } = setup();
+    const event = { ...first, button };
+    expect(drawing.down(event, start)).toBe(false);
+    expect(drawing.move(event, end)).toBe(false);
+    expect(drawing.up(event)).toBe(false);
+    expect(drawing.cancel(event)).toBe(false);
+    expect(strokes).toEqual([]);
+    expect(drawing.down({ ...first, button: 0 }, start)).toBe(true);
+    expect(drawing.move(first, end)).toBe(true);
+    expect(drawing.up(first)).toBe(true);
+    expect(strokes).toEqual([[start, end]]);
+  });
+
+  it.each(['mouse', 'pen', 'touch'])('accepts the primary drawing button for %s input', pointerType => {
+    const { strokes, drawing } = setup();
+    const event = { ...first, button: 0, pointerType };
+    expect(drawing.down(event, start)).toBe(true);
+    expect(drawing.move(event, end)).toBe(true);
+    expect(drawing.up(event)).toBe(true);
+    expect(strokes).toEqual([[start, end]]);
+  });
+
   it('records a normal down/move/up stroke and accepts the next stroke', () => {
     const { strokes, drawing } = setup();
     expect(drawing.down(first, start)).toBe(true);
