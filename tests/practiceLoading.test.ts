@@ -515,6 +515,35 @@ describe('saving judged attempts', () => {
   });
 });
 
+describe('range-test average including unjudged questions', () => {
+  it.each([
+    { answers: ['judge', 'judge'], average: 85, unjudged: 0 },
+    { answers: ['judge', 'skip'], average: 43, unjudged: 1 },
+    { answers: ['draw', 'judge'], average: 43, unjudged: 1 },
+    { answers: ['skip', 'skip'], average: 0, unjudged: 2 },
+    { answers: ['draw', 'draw'], average: 0, unjudged: 2 },
+    { answers: ['unscored', 'judge'], average: 43, unjudged: 1 },
+    { answers: ['error', 'judge'], average: 43, unjudged: 1 }
+  ])('counts unjudged answers as zero: $answers', async ({ answers, average, unjudged }) => {
+    await startTest();
+    for (const [i, answer] of answers.entries()) {
+      if (answer !== 'skip') drawStroke();
+      if (answer === 'unscored') vi.mocked(isScored).mockReturnValueOnce(false);
+      if (answer === 'error') vi.mocked(evaluate).mockImplementationOnce(() => { throw new Error('evaluation failed'); });
+      if (['judge', 'unscored', 'error'].includes(answer)) judge();
+      app.click('#next');
+      if (i === 0) { loads[loads.length - 1].resolve(); await settle(); }
+    }
+    expect(app.innerHTML).toContain(`平均 ${average}点`);
+    expect(app.innerHTML).toContain(`${2 - unjudged} / 2問を判定しました`);
+    expect(app.innerHTML).toContain(`未判定 ${unjudged}問（0点で計算）`);
+    answers.forEach((answer, i) => {
+      expect(app.innerHTML).toContain(`<b>${['一', '二'][i]}</b>${answer === 'judge' ? '85点' : '未判定'}`);
+    });
+    expect(saveResult).toHaveBeenCalledTimes(2 - unjudged);
+  });
+});
+
 describe('grade parameters', () => {
   it.each(['constructor', '__proto__', 'toString', 'hasOwnProperty', 'unknown', ''])('falls back to the e1 list for grade=%s', async grade => {
     await restart({}, `?grade=${grade}`);
