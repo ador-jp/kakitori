@@ -183,6 +183,32 @@ describe('combined list filters', () => {
     range('', '');
     expect(visible()).toEqual(['一', '二']);
   });
+  it.each(['search', 'range', 'both'])('starts random practice from the visible %s filter results', filter => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    if (filter !== 'range') search('二');
+    if (filter !== 'search') range('2', '2');
+    expect(visible()).toEqual(['二']);
+    app.click('#random');
+    expect(fetch).toHaveBeenLastCalledWith('./data/kanji/04e8c.svg');
+  });
+
+  it.each(['search', 'combined'])('falls back to the full grade when the %s filter is empty', filter => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    search(filter === 'search' ? '海' : '二');
+    if (filter === 'combined') range('1', '1');
+    expect(visible()).toEqual([]);
+    app.click('#random');
+    expect(fetch).toHaveBeenLastCalledWith('./data/kanji/04e00.svg');
+  });
+
+  it('starts random practice from the full grade when no filter is applied', async () => {
+    const chars = Array.from({ length: 30 }, (_, i) => String.fromCodePoint(0x4e00 + i));
+    await restart({ meta: () => Promise.resolve({ ok: true, json: () => ({ e1: chars, joyo: chars }) }) }, '?grade=e1');
+    vi.spyOn(Math, 'random').mockReturnValue(0.999);
+    app.click('#random');
+    expect(fetch).toHaveBeenLastCalledWith('./data/kanji/04e1d.svg');
+  });
+
   it('does not apply the initial 25-item test range to search until requested', async () => {
     const chars = Array.from({ length: 30 }, (_, i) => String.fromCodePoint(0x4e00 + i));
     await restart({ meta: () => Promise.resolve({ ok: true, json: () => ({ e1: chars, joyo: chars }) }) }, '?grade=e1');
