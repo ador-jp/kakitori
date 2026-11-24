@@ -17,6 +17,7 @@ let meta: Meta, prompts: Prompts | undefined, grade = 'e1', selected = '', mode 
 let testQueue: string[] = [], testIndex = 0, testScores: Array<number | undefined> = [];
 let resultSaved = false;
 let slowDemo = loadSlowDemo();
+let practiceSequence: string[] | undefined;
 const referenceLoad = createLatestLoad(loadReference, value => { reference = value; renderPractice(); }, referenceError);
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) registerSW({ immediate: true });
@@ -79,11 +80,12 @@ function home() {
     <section><h2>学習メニュー</h2><div class="menu"><button id="weak">苦手な漢字</button><button id="progress">これまでの練習</button></div><p class="privacy">学習記録はこの端末だけに保存され、外部へ送信されません。</p></section></main>`;
   app.querySelectorAll<HTMLButtonElement>('[data-grade]').forEach(b => b.onclick = () => choose(b.dataset.grade!));
   app.querySelector<HTMLButtonElement>('#progress')!.onclick = progressView;
-  app.querySelector<HTMLButtonElement>('#weak')!.onclick = () => { const weak = Object.entries(loadProgress()).filter(([, p]) => p.lowScores > 0).sort((a, b) => b[1].lowScores - a[1].lowScores).map(([k]) => k); list('苦手な漢字', weak); };
+  app.querySelector<HTMLButtonElement>('#weak')!.onclick = () => { const weak = Object.entries(loadProgress()).filter(([, p]) => p.lowScores > 0).sort((a, b) => b[1].lowScores - a[1].lowScores).map(([k]) => k); list('苦手な漢字', weak, true); };
 }
 
 function choose(key: string) { grade = validGrade(key); testQueue = []; setQuery({ grade }); list(labels[grade], meta[grade]); }
-function list(title: string, chars: string[]) {
+function list(title: string, chars: string[], weakList = false) {
+  practiceSequence = weakList ? [...chars] : undefined;
   referenceLoad.invalidate();
   app.innerHTML = `<header class="compact"><button class="back" aria-label="ホームへ戻る">← ホーム</button><h1>${title}</h1></header><main><section><h2>練習する漢字を選んでください</h2>${grade.startsWith('j') ? '<p class="notice">中学校には公式の学年別配当がないため、常用漢字の学習用参考区分です。</p>' : ''}<div class="filters"><label>漢字を検索 <input id="search" maxlength="1" inputmode="text" placeholder="例：海"></label><label>番号 <input id="from" type="number" min="1" value="1"> 〜 <input id="to" type="number" min="1" value="${Math.min(25, chars.length)}"></label><button id="range">しぼりこむ</button><button id="random" ${chars.length ? '' : 'disabled'}>ランダム練習</button></div><div class="test-maker"><h3>範囲からテストを作る</h3><label>出題数 <input id="test-count" type="number" min="1" value="5"> 問</label><button id="start-test" class="primary" ${chars.length ? '' : 'disabled'}>この範囲からテスト</button><p id="test-error" role="alert">${chars.length ? '' : emptyRangeMessage}</p></div><p id="count">${chars.length}字</p>${chars.length ? '' : '<p class="hint">練習する漢字はまだありません。</p>'}<div class="kanji-grid">${chars.map((k, i) => `<button data-kanji="${k}" aria-label="${k}を練習"><span>${k}</span><small>${i + 1}</small></button>`).join('')}</div></section></main>`;
   app.querySelector<HTMLButtonElement>('.back')!.onclick = home;
@@ -142,7 +144,10 @@ function renderPractice(result?: Evaluation) {
   app.querySelector<HTMLButtonElement>('#clear')!.onclick = () => { strokes = []; resultSaved = false; renderPractice(); };
   const modelButton = app.querySelector<HTMLButtonElement>('#model'); if (modelButton) modelButton.onclick = showDemo;
   app.querySelector<HTMLButtonElement>('#judge')!.onclick = e => { const button = e.currentTarget as HTMLButtonElement; button.disabled = true; button.textContent = '判定中…'; requestAnimationFrame(() => { if (app.querySelector('#judge') !== button) return; try { const r = evaluate(strokes, reference); if (!isScored(r)) { button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = r.messages[0]; return; } if (mode === 'test' && testQueue.length) testScores[testIndex] = r.total; showModel = true; renderPractice(r); if (!resultSaved) { saveResult(selected, r.total); resultSaved = true; } requestAnimationFrame(() => app.querySelector<HTMLElement>('.result')?.focus()); } catch (error) { console.error(error); button.disabled = false; button.textContent = '判定する'; app.querySelector('#hint')!.textContent = '判定できませんでした。もう一度押してください。'; } }); };
-  app.querySelector<HTMLButtonElement>('#next')!.onclick = next;
+  app.querySelector<HTMLButtonElement>('#next')!.onclick = () => {
+    if (testQueue.length || !practiceSequence?.length) { next(); return; }
+    practice(practiceSequence[(practiceSequence.indexOf(selected) + 1) % practiceSequence.length]);
+  };
 }
 
 function bindCanvas(result?: Evaluation) {

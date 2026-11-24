@@ -5,7 +5,7 @@ import { saveResult } from '../src/storage';
 vi.mock('virtual:pwa-register', () => ({ registerSW: vi.fn() }));
 vi.mock('../src/preferences', () => ({ loadSlowDemo: () => false }));
 vi.mock('../src/selection', async importOriginal => ({ ...await importOriginal<typeof import('../src/selection')>(), selectRandom: () => ['一', '二'] }));
-vi.mock('../src/storage', () => ({ loadProgress: () => ({}), saveResult: vi.fn() }));
+vi.mock('../src/storage', () => ({ loadProgress: vi.fn(() => ({})), saveResult: vi.fn() }));
 vi.mock('../src/scoring', () => ({
   evaluate: vi.fn(() => ({ total: 85, strokes: [], messages: [], passed: true })),
   isScored: vi.fn(() => true),
@@ -192,6 +192,79 @@ describe('combined list filters', () => {
     expect(visible()).toEqual([]);
     range('1', '30');
     expect(visible()).toEqual([chars[29]]);
+  });
+});
+
+describe('weak-list practice sequence', () => {
+  async function openWeakList(single = false) {
+    const { loadProgress } = await import('../src/storage');
+    const records: ReturnType<typeof loadProgress> = single ? { 海: { attempts: 5, latest: 50, best: 50, lowScores: 5 } }
+      : { 一: { attempts: 1, latest: 50, best: 50, lowScores: 1 }, 海: { attempts: 5, latest: 50, best: 50, lowScores: 5 }, 二: { attempts: 3, latest: 50, best: 50, lowScores: 3 } };
+    vi.mocked(loadProgress).mockReturnValueOnce(records);
+    app.click('.back');
+    app.click('#weak');
+    return { records, loadProgress };
+  }
+
+  async function openKanji(kanji: string) {
+    app.click(`[data-kanji="${kanji}"]`);
+    loads[loads.length - 1].resolve();
+    await settle();
+  }
+
+  it.each([
+    { current: '海', next: '二', url: '04e8c' },
+    { current: '一', next: '海', url: '06d77' }
+  ])('advances from $current to $next in displayed weak-list order, wrapping at the end', async ({ current, url }) => {
+    await openWeakList();
+    expect(app.querySelectorAll('[data-kanji]').map(button => (button.dataset as { kanji: string }).kanji)).toEqual(['海', '二', '一']);
+    await openKanji(current);
+    app.click('#next');
+    expect(fetch).toHaveBeenLastCalledWith(`./data/kanji/${url}.svg`);
+  });
+
+  it('stays on the same kanji for a single-item weak list', async () => {
+    await openWeakList(true);
+    await openKanji('海');
+    app.click('#next');
+    expect(fetch).toHaveBeenLastCalledWith('./data/kanji/06d77.svg');
+  });
+
+  it('keeps the original sequence if progress changes after judging', async () => {
+    const { records, loadProgress } = await openWeakList();
+    await openKanji('海');
+    drawStroke();
+    judge();
+    for (const record of Object.values(records)) record.lowScores = 0;
+    app.click('#next');
+    expect(fetch).toHaveBeenLastCalledWith('./data/kanji/04e8c.svg');
+    expect(loadProgress).toHaveBeenCalledOnce();
+  });
+
+  it('keeps ordinary grade order and wrapping unchanged', async () => {
+    await openKanji('一');
+    app.click('#next');
+    expect(fetch).toHaveBeenLastCalledWith('./data/kanji/04e8c.svg');
+    loads[loads.length - 1].resolve(); await settle();
+    app.click('#next');
+    expect(fetch).toHaveBeenLastCalledWith('./data/kanji/04e00.svg');
+  });
+
+  it('clears weak-list context when returning to a grade list', async () => {
+    await openWeakList();
+    await openKanji('海');
+    app.click('.back');
+    await openKanji('一');
+    app.click('#next');
+    expect(fetch).toHaveBeenLastCalledWith('./data/kanji/04e8c.svg');
+  });
+
+  it('still finishes a range test started from the weak list', async () => {
+    await openWeakList();
+    await startTest();
+    app.click('#next'); loads[loads.length - 1].resolve(); await settle();
+    app.click('#next');
+    expect(app.innerHTML).toContain('<h1>テスト結果</h1>');
   });
 });
 
