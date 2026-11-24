@@ -2,7 +2,7 @@ import './style.css';
 import './mobile.css';
 import { correctionStrokeIndices, evaluate, isScored, type Evaluation, type Point, type Stroke } from './scoring';
 import { clearProgress, loadProgress, saveResult } from './storage';
-import { registerSW } from 'virtual:pwa-register';
+import { registerSafeUpdate } from './safeUpdate';
 import { modeForKanjiSelection, randomItem, selectRandom } from './selection';
 import { loadSlowDemo, saveSlowDemo } from './preferences';
 import { createLatestLoad } from './latestLoad';
@@ -19,7 +19,10 @@ let resultSaved = false;
 let slowDemo = loadSlowDemo();
 const referenceLoad = createLatestLoad(loadReference, value => { reference = value; renderPractice(); }, referenceError);
 
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) registerSW({ immediate: true });
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) registerSafeUpdate(() => ({
+  unjudgedAnswer: strokes.length > 0 && !resultSaved && !!app.querySelector('#board'),
+  activeTest: testQueue.length > 0
+}));
 
 function urlFor(char: string) { return `./data/kanji/${char.codePointAt(0)!.toString(16).padStart(5, '0')}.svg`; }
 function setQuery(values: Record<string, string>) { const q = new URLSearchParams(values); history.replaceState(null, '', `?${q}`); }
