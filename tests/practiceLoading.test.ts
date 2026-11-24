@@ -146,6 +146,22 @@ describe('combined list filters', () => {
     expect(visible()).toEqual(['二']);
     expect(app.innerHTML).toContain('<p id="count">2字</p>');
   });
+  it('allows searching the supplementary-plane kanji in the shipped data', async () => {
+    const { default: meta } = await import('../public/data/meta.json');
+    const kanji = '𠮟';
+    expect(meta.j2).toContain(kanji);
+    expect(kanji.length).toBe(2);
+    await restart({ meta: () => Promise.resolve({ ok: true, json: () => meta }) }, '?grade=j2');
+    const maxLength = Number(app.innerHTML.match(/id="search" maxlength="(\d+)"/)![1]);
+    expect(maxLength).toBeGreaterThanOrEqual(kanji.length);
+    search(kanji);
+    expect(visible()).toEqual([kanji]);
+    search('叱');
+    expect(visible()).toEqual([]);
+    search('');
+    expect(visible()).toEqual(meta.j2);
+  });
+
   it('combines range then search', () => {
     range('1', '1');
     search('二');
